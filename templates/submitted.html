@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>접수 완료</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Arial', sans-serif;
+    background: linear-gradient(135deg, #f0f4ff 0%, #e8f5e9 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+
+  .card {
+    background: white;
+    border-radius: 20px;
+    padding: 48px 40px;
+    width: 420px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+    text-align: center;
+  }
+
+  .check-icon {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #4CAF50, #43A047);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    box-shadow: 0 8px 24px rgba(76, 175, 80, 0.35);
+    animation: pop 0.4s ease;
+  }
+
+  @keyframes pop {
+    0% { transform: scale(0.5); opacity: 0; }
+    80% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .check-icon svg {
+    width: 40px;
+    height: 40px;
+    stroke: white;
+    stroke-width: 3;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  h2 {
+    font-size: 22px;
+    color: #1a1a2e;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    color: #888;
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+
+  .info-box {
+    background: #f8faff;
+    border: 1.5px solid #e3e8f7;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 12px;
+    text-align: left;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+  }
+
+  .info-row:last-child { border-bottom: none; }
+
+  .info-label { color: #999; font-size: 13px; }
+  .info-value { color: #333; font-weight: 600; }
+
+  .complaint-id {
+    font-size: 28px;
+    font-weight: 800;
+    color: #4CAF50;
+  }
+
+  .status-badge {
+    display: inline-block;
+    background: #fff3e0;
+    color: #e65100;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* 조회 안내 박스 */
+  .track-hint {
+    background: #f0f7ff;
+    border: 1.5px solid #d0e6ff;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    text-align: left;
+  }
+
+  .track-hint .hint-icon { font-size: 18px; flex-shrink: 0; }
+
+  .track-hint p {
+    font-size: 13px;
+    color: #4a6fa5;
+    line-height: 1.6;
+  }
+
+  .track-hint strong { color: #1a4fa5; }
+
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    margin-bottom: 10px;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+
+  .btn-track {
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    color: white;
+    box-shadow: 0 4px 15px rgba(33,150,243,0.3);
+  }
+
+  .btn-track:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(33,150,243,0.4);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #4CAF50, #43A047);
+    color: white;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+  }
+
+  .btn-secondary {
+    background: #f5f5f5;
+    color: #555;
+    margin-bottom: 0;
+  }
+
+  .btn-secondary:hover { background: #eeeeee; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="check-icon">
+    <svg viewBox="0 0 24 24">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+  </div>
+
+  <h2>접수가 완료되었습니다!</h2>
+  <p class="subtitle">담당자가 확인 후 처리할 예정입니다</p>
+
+  <div class="info-box">
+    <div class="info-row">
+      <span class="info-label">접수번호</span>
+      <span class="complaint-id">#{{ complaint_id }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">병동</span>
+      <span class="info-value">{{ ward }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">솔루션</span>
+      <span class="info-value">{{ solution }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">문제 유형</span>
+      <span class="info-value">{{ issue }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">처리 상태</span>
+      <span class="status-badge">접수대기</span>
+    </div>
+  </div>
+
+  <!-- 조회 안내 -->
+  <div class="track-hint">
+    <span class="hint-icon">💡</span>
+    <p>처리 현황은 아래 버튼을 눌러<br>
+    <strong>병동 조회 페이지</strong>에서 확인하세요</p>
+  </div>
+
+  <a href="/ward?ward={{ ward }}" class="btn btn-track">🔍 {{ ward }} 민원 현황 조회</a>
+  <a href="/" class="btn btn-primary">➕ 새 민원 접수하기</a>
+  <a href="/admin" class="btn btn-secondary">📊 관리자 페이지</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>관리자 대시보드</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* ── 탭 ── */
+    .tab-bar {
+      background: white;
+      padding: 0 28px;
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    .tab-btn {
+      padding: 14px 20px;
+      font-size: 14px; font-weight: 600;
+      border: none; background: none;
+      color: #aaa; cursor: pointer;
+      font-family: inherit;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color .2s;
+    }
+    .tab-btn.active { color: #4CAF50; border-bottom-color: #4CAF50; }
+    .tab-btn:hover  { color: #555; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── 계정 관리 패널 ── */
+    .acc-wrap { padding: 28px; max-width: 1300px; margin: 0 auto; }
+
+    .acc-add-card {
+      background: white; border-radius: 14px; padding: 24px 28px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.05); margin-bottom: 20px;
+    }
+    .acc-add-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .acc-add-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .acc-field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 140px; }
+    .acc-field label { font-size: 12px; font-weight: 700; color: #666; }
+    .acc-field input {
+      padding: 10px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px;
+      font-size: 14px; outline: none; font-family: inherit; background: #fafafa;
+      transition: border-color .2s;
+    }
+    .acc-field input:focus { border-color: #4CAF50; background: white; }
+    .btn-add-acc {
+      padding: 10px 22px;
+      background: linear-gradient(135deg,#4CAF50,#43A047);
+      color: white; border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+      box-shadow: 0 4px 12px rgba(76,175,80,.3); transition: all .2s;
+      white-space: nowrap;
+    }
+    .btn-add-acc:hover { transform: translateY(-2px); }
+    .acc-err { color: #f44336; font-size: 13px; margin-top: 8px; display: none; }
+    .acc-ok  { color: #4CAF50; font-size: 13px; margin-top: 8px; display: none; }
+
+    .acc-table-wrap {
+      background: white; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.05); overflow: hidden;
+    }
+    .acc-table-head {
+      padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .acc-table-head h3 { font-size: 14px; font-weight: 700; }
+    .acc-count { background: #f0f2f7; color: #666; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+
+    .acc-table { width: 100%; border-collapse: collapse; }
+    .acc-table th {
+      background: #f8f9fb; padding: 11px 16px; font-size: 11px; font-weight: 700;
+      color: #999; text-align: left; border-bottom: 1px solid #f0f0f0;
+    }
+    .acc-table td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #f8f8f8; vertical-align: middle; }
+    .acc-table tr:last-child td { border-bottom: none; }
+    .acc-table tr:hover td { background: #fafbff; }
+    .ward-name { font-weight: 700; }
+    .created-at { color: #bbb; font-size: 12px; }
+
+    /* 접속 URL */
+    .url-cell { display: flex; align-items: center; gap: 6px; }
+    .url-text {
+      font-family: 'Courier New', monospace;
+      font-size: 11px; color: #555;
+      background: #f4f6fa; border-radius: 6px;
+      padding: 4px 8px; max-width: 280px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .btn-copy {
+      flex-shrink: 0;
+      padding: 4px 10px; border-radius: 6px;
+      border: 1.5px solid #e0e0e0; background: white;
+      font-size: 11px; font-weight: 700; cursor: pointer;
+      color: #666; font-family: inherit; transition: all .2s;
+    }
+    .btn-copy:hover { border-color: #4CAF50; color: #4CAF50; }
+    .btn-copy.copied { border-color: #4CAF50; color: white; background: #4CAF50; }
+
+    .btn-reset {
+      padding: 5px 12px; border-radius: 20px; border: 1.5px solid #e0e0e0;
+      font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+      color: #888; background: white; transition: all .2s; margin-right: 6px;
+    }
+    .btn-reset:hover { border-color: #4CAF50; color: #4CAF50; }
+
+    .btn-del {
+      padding: 5px 12px; border-radius: 20px; border: none;
+      font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+      color: #f44336; background: #fce4ec; transition: all .2s;
+    }
+    .btn-del:hover { background: #f44336; color: white; }
+
+    /* 비번 변경 인라인 */
+    .reset-row { display: none; align-items: center; gap: 8px; margin-top: 8px; }
+    .reset-row input {
+      padding: 6px 12px; border: 1.5px solid #e0e0e0; border-radius: 8px;
+      font-size: 13px; outline: none; font-family: inherit;
+    }
+    .reset-row input:focus { border-color: #4CAF50; }
+    .btn-confirm-reset {
+      padding: 6px 14px; background: #4CAF50; color: white; border: none;
+      border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-cancel-reset {
+      padding: 6px 12px; background: #f5f5f5; color: #888; border: none;
+      border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit;
+    }
+
+    .empty-acc { text-align: center; padding: 40px; color: #bbb; font-size: 14px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Arial', sans-serif;
+      background: #f0f2f7;
+      color: #1a1a2e;
+    }
+
+    /* ── 새 민원 알림 배너 ── */
+    .new-alert-banner {
+      background: linear-gradient(135deg, #f44336, #e53935);
+      color: white;
+      padding: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .4s ease, padding .4s ease;
+      position: sticky; top: 52px; z-index: 90;
+    }
+    .new-alert-banner.show {
+      max-height: 80px;
+      padding: 12px 28px;
+    }
+    .banner-inner {
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 12px;
+    }
+    .banner-text { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .banner-text .pulse {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: white;
+      animation: pulse-anim 1.2s infinite;
+    }
+    @keyframes pulse-anim {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .5; transform: scale(1.4); }
+    }
+    .banner-btns { display: flex; gap: 8px; }
+    .btn-banner {
+      padding: 6px 16px; border-radius: 20px; border: 2px solid white;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      font-family: inherit; transition: all .2s;
+    }
+    .btn-banner.primary { background: white; color: #f44336; }
+    .btn-banner.ghost   { background: transparent; color: white; }
+    .btn-banner:hover   { opacity: .85; }
+
+    /* ── 헤더 벨 아이콘 + 패널 ── */
+    .bell-wrap { position: relative; display: inline-flex; align-items: center; }
+    .bell-badge {
+      position: absolute; top: -4px; right: -4px;
+      background: #f44336; color: white;
+      border-radius: 50%; width: 16px; height: 16px;
+      font-size: 10px; font-weight: 800;
+      display: none; align-items: center; justify-content: center;
+    }
+    /* 벨 드롭다운 패널 */
+    .bell-panel {
+      position: absolute; top: calc(100% + 10px); right: 0;
+      width: 320px; background: white; border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.18);
+      border: 1px solid #f0f0f0; z-index: 500;
+      display: none; overflow: hidden;
+    }
+    .bell-panel.open { display: block; }
+    .bell-panel-hdr {
+      padding: 14px 16px; border-bottom: 1px solid #f5f5f5;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .bell-panel-hdr span { font-size: 13px; font-weight: 800; color: #1a1a2e; }
+    .bell-panel-hdr button {
+      background: none; border: none; cursor: pointer;
+      font-size: 14px; color: #bbb; padding: 2px 6px; border-radius: 6px;
+    }
+    .bell-panel-hdr button:hover { background: #f5f5f5; color: #555; }
+    .bell-panel-list { max-height: 300px; overflow-y: auto; }
+    .bell-item {
+      padding: 11px 16px; border-bottom: 1px solid #f8f8f8;
+      display: flex; align-items: flex-start; gap: 10px;
+      transition: background .12s;
+    }
+    .bell-item:last-child { border-bottom: none; }
+    .bell-item:hover { background: #fafbff; }
+    .bell-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #f44336; flex-shrink: 0; margin-top: 4px;
+    }
+    .bell-item-body { flex: 1; }
+    .bell-item-title { font-size: 12px; font-weight: 700; color: #333; }
+    .bell-item-sub   { font-size: 11px; color: #aaa; margin-top: 2px; }
+    .bell-empty { text-align: center; padding: 30px; color: #ccc; font-size: 13px; }
+
+    /* ── 자동 싱크 인디케이터 ── */
+    .sync-badge {
+      font-size: 11px; font-weight: 700; color: #aaa;
+      display: flex; align-items: center; gap: 4px; padding: 6px 10px;
+      border-radius: 8px; background: #f5f5f5; user-select: none;
+    }
+    .sync-badge.syncing { color: #4CAF50; background: #e8f5e9; }
+    .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #ccc; }
+    .sync-badge.syncing .sync-dot { background: #4CAF50; animation: pulse-anim .8s infinite; }
+
+    /* ── 헤더 ── */
+    .topbar {
+      background: white;
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar h1 { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .topbar-right { display: flex; gap: 10px; align-items: center; }
+
+    .btn-sm {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all .2s;
+    }
+    .btn-ghost { background: #f0f2f7; color: #555; }
+    .btn-ghost:hover { background: #e0e3ed; }
+    .btn-green { background: linear-gradient(135deg,#4CAF50,#43A047); color: white; box-shadow: 0 3px 10px rgba(76,175,80,.25); }
+    .btn-green:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(76,175,80,.35); }
+
+    /* ── 본문 ── */
+    .main { padding: 24px 28px; max-width: 1300px; margin: 0 auto; }
+
+    /* ── KPI 카드 ── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .kpi-card {
+      background: white;
+      border-radius: 14px;
+      padding: 18px 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      transition: transform .2s;
+    }
+    .kpi-card:hover { transform: translateY(-3px); }
+    .kpi-icon { font-size: 20px; margin-bottom: 8px; }
+    .kpi-label { font-size: 11px; color: #aaa; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+    .kpi-val { font-size: 28px; font-weight: 800; line-height: 1; }
+    .kpi-card.total  .kpi-val { color: #3d5afe; }
+    .kpi-card.wait   .kpi-val { color: #f44336; }
+    .kpi-card.prog   .kpi-val { color: #FF9800; }
+    .kpi-card.done   .kpi-val { color: #4CAF50; }
+    .kpi-card.month  .kpi-val { color: #9c27b0; }
+
+    /* ── 차트/스탯 공통 ── */
+    .chart-grid-top {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .chart-grid-bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .chart-box {
+      background: white;
+      border-radius: 14px;
+      padding: 20px 22px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .chart-box-header { margin-bottom: 16px; }
+    .chart-box-header h3 { font-size: 13px; font-weight: 800; color: #333; }
+    .chart-box-header p  { font-size: 11px; color: #bbb; margin-top: 2px; }
+    .chart-box canvas { display: block; }
+
+    /* ── 처리현황 stat ── */
+    .stat-rate-wrap { text-align: center; padding: 10px 0 16px; border-bottom: 1px solid #f5f5f5; margin-bottom: 16px; }
+    .stat-rate-num  { font-size: 48px; font-weight: 900; line-height: 1; }
+    .stat-rate-label{ font-size: 12px; color: #aaa; font-weight: 600; margin-top: 4px; }
+    .stat-3col { display: flex; justify-content: space-around; }
+    .stat-item { text-align: center; }
+    .stat-big  { font-size: 32px; font-weight: 900; line-height: 1; }
+    .stat-name { font-size: 11px; color: #aaa; font-weight: 600; margin-top: 4px; }
+    .stat-red    .stat-big { color: #f44336; }
+    .stat-orange .stat-big { color: #FF9800; }
+    .stat-green  .stat-big { color: #4CAF50; }
+
+    /* ── 랭킹 리스트 ── */
+    .rank-list { display: flex; flex-direction: column; gap: 8px; }
+    .rank-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 10px; border-radius: 10px; background: #fafbff;
+    }
+    .rank-no {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #e8eaf6; color: #5c6bc0;
+      font-size: 11px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .rank-no.r1 { background: #fff8e1; color: #f9a825; }
+    .rank-no.r2 { background: #f5f5f5; color: #757575; }
+    .rank-no.r3 { background: #fbe9e7; color: #bf360c; }
+    .rank-name { font-size: 12px; font-weight: 700; color: #333; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rank-bar-wrap { flex: 2; height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden; }
+    .rank-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4CAF50, #81C784); transition: width .6s ease; }
+    .rank-val { font-size: 12px; font-weight: 800; color: #333; white-space: nowrap; min-width: 28px; text-align: right; }
+
+    /* ── 랭킹 드롭다운 필터 ── */
+    .rank-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+    .rank-hdr-text h3 { font-size: 13px; font-weight: 800; color: #333; }
+    .rank-hdr-text p  { font-size: 11px; color: #bbb; margin-top: 2px; }
+    .filter-dd-wrap   { position: relative; }
+    .filter-dd-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 12px; border-radius: 20px;
+      border: 1.5px solid #e0e0e0; background: white;
+      font-size: 11px; font-weight: 700; cursor: pointer;
+      color: #666; font-family: inherit; transition: all .2s;
+      white-space: nowrap;
+    }
+    .filter-dd-btn:hover { border-color: #4CAF50; color: #4CAF50; }
+    .filter-dd-btn.on   { background: #4CAF50; border-color: #4CAF50; color: white; }
+    .filter-dd-btn .arrow { font-size: 9px; transition: transform .2s; }
+    .filter-dd-btn.open .arrow { transform: rotate(180deg); }
+    .filter-dd {
+      position: absolute; right: 0; top: calc(100% + 5px);
+      background: white; border-radius: 12px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.14);
+      border: 1px solid #f0f0f0;
+      min-width: 170px; z-index: 200;
+      overflow: hidden;
+      display: none;
+    }
+    .filter-dd.open { display: block; }
+    .filter-dd-opt {
+      padding: 9px 14px; font-size: 12px; cursor: pointer;
+      color: #444; transition: background .12s; font-weight: 600;
+    }
+    .filter-dd-opt:hover { background: #f5f5f5; }
+    .filter-dd-opt.active { background: #e8f5e9; color: #2e7d32; }
+    .filter-dd-opt.all-opt { border-bottom: 1px solid #f5f5f5; color: #888; font-weight: 700; }
+
+    /* ── 필터 바 ── */
+    .filter-bar {
+      background: white;
+      border-radius: 14px;
+      padding: 14px 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-bottom: 18px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .filter-bar input,
+    .filter-bar select {
+      padding: 8px 12px;
+      border: 1.5px solid #e8e8e8;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      font-family: inherit;
+      background: #fafafa;
+      transition: border-color .2s;
+    }
+    .filter-bar input:focus,
+    .filter-bar select:focus { border-color: #4CAF50; }
+    .filter-bar input { min-width: 160px; }
+    .btn-clear { background: none; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; color: #999; font-family: inherit; }
+    .btn-clear:hover { border-color: #bbb; color: #555; }
+
+    /* ── 테이블 ── */
+    .table-wrap {
+      background: white;
+      border-radius: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      overflow: hidden;
+    }
+    .table-head-bar {
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .table-head-bar h3 { font-size: 14px; font-weight: 700; }
+    .count-tag { background: #f0f2f7; color: #666; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: #f8f9fb;
+      padding: 11px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #999;
+      text-align: left;
+      border-bottom: 1px solid #f0f0f0;
+      white-space: nowrap;
+    }
+    td {
+      padding: 11px 14px;
+      font-size: 13px;
+      border-bottom: 1px solid #f8f8f8;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafbff; }
+
+    .id-cell { color: #ccc; font-size: 12px; font-weight: 600; }
+    .ward-cell { font-weight: 700; }
+    .sol-tag { background: #e8f5e9; color: #2e7d32; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+    .issue-cell { color: #444; }
+    .desc-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #aaa; font-size: 12px; }
+    .time-cell { color: #ccc; font-size: 12px; white-space: nowrap; }
+
+    /* ── 액션 버튼 ── */
+    .action-area { display: flex; align-items: center; gap: 8px; }
+
+    .btn-accept {
+      padding: 6px 14px;
+      background: linear-gradient(135deg, #2196F3, #1565C0);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      box-shadow: 0 3px 8px rgba(33,150,243,.3);
+      transition: all .2s;
+      white-space: nowrap;
+    }
+    .btn-accept:hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(33,150,243,.4); }
+
+    .btn-complete {
+      padding: 6px 14px;
+      background: linear-gradient(135deg, #4CAF50, #2e7d32);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      box-shadow: 0 3px 8px rgba(76,175,80,.3);
+      transition: all .2s;
+      white-space: nowrap;
+    }
+    .btn-complete:hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(76,175,80,.4); }
+
+    .status-chip {
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .s-접수대기 { background: #fce4ec; color: #c62828; }
+    .s-처리중   { background: #fff8e1; color: #e65100; }
+    .s-완료     { background: #e8f5e9; color: #2e7d32; }
+
+    /* ── 토스트 ── */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #1a1a2e;
+      color: white;
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,.2);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all .3s;
+      z-index: 999;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    .empty-td { text-align: center; padding: 40px; color: #ccc; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<div class="topbar">
+  <h1>🔧 스마트솔루션 관리자</h1>
+  <div class="topbar-right">
+    <div class="sync-badge" id="syncBadge">
+      <span class="sync-dot"></span>
+      <span id="syncLabel">1:00</span>
+    </div>
+    <div class="bell-wrap" id="bellWrap">
+      <button class="btn-sm btn-ghost" id="bellBtn" onclick="toggleBellPanel()" title="새 민원 알림">
+        🔔
+      </button>
+      <span class="bell-badge" id="bellBadge"></span>
+      <!-- 벨 드롭다운 패널 -->
+      <div class="bell-panel" id="bellPanel">
+        <div class="bell-panel-hdr">
+          <span>🔔 새 민원 알림</span>
+          <button onclick="closeBellPanel()">✕</button>
+        </div>
+        <div class="bell-panel-list" id="bellPanelList">
+          <div class="bell-empty">새로운 민원 알림이 없습니다</div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-sm btn-ghost" onclick="location.href='/admin?key='+MY_KEY">🔄 새로고침</button>
+    <a href="/login" class="btn-sm btn-ghost">로그아웃</a>
+  </div>
+</div>
+
+<!-- 새 민원 알림 배너 -->
+<div class="new-alert-banner" id="alertBanner">
+  <div class="banner-inner">
+    <div class="banner-text">
+      <span class="pulse"></span>
+      <span id="alertText">새 민원이 접수되었습니다</span>
+    </div>
+    <div class="banner-btns">
+      <button class="btn-banner primary" onclick="refreshAndDismiss()">🔄 목록 새로고침</button>
+      <button class="btn-banner ghost"   onclick="dismissAlert()">✕ 닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 탭 -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab1" onclick="switchTab('complaints')">📋 민원 관리</button>
+  <button class="tab-btn"        id="tab2" onclick="switchTab('accounts')">👤 계정 관리</button>
+</div>
+
+<!-- 민원 관리 패널 -->
+<div class="tab-panel active" id="panel-complaints">
+<div class="main">
+
+  <!-- KPI -->
+  <div class="kpi-row">
+    <div class="kpi-card total">
+      <div class="kpi-icon">📋</div>
+      <div class="kpi-label">총 민원</div>
+      <div class="kpi-val">{{ total }}</div>
+    </div>
+    <div class="kpi-card wait">
+      <div class="kpi-icon">🔴</div>
+      <div class="kpi-label">접수대기</div>
+      <div class="kpi-val">{{ status_count['접수대기'] }}</div>
+    </div>
+    <div class="kpi-card prog">
+      <div class="kpi-icon">🟡</div>
+      <div class="kpi-label">처리중</div>
+      <div class="kpi-val">{{ status_count['처리중'] }}</div>
+    </div>
+    <div class="kpi-card done">
+      <div class="kpi-icon">🟢</div>
+      <div class="kpi-label">완료</div>
+      <div class="kpi-val">{{ status_count['완료'] }}</div>
+    </div>
+    <div class="kpi-card month">
+      <div class="kpi-icon">📅</div>
+      <div class="kpi-label">이번달</div>
+      <div class="kpi-val">{{ latest_month_count }}</div>
+    </div>
+  </div>
+
+  <!-- 스탯 + 차트 Row 1 -->
+  <div class="chart-grid-top">
+
+    <!-- 처리 현황 숫자 -->
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <h3>📊 처리 현황</h3>
+        <p>전체 민원 상태 분포</p>
+      </div>
+      {% set _total = status_count['접수대기'] + status_count['처리중'] + status_count['완료'] %}
+      {% set _rate  = ((status_count['완료'] / _total * 100) | int) if _total > 0 else 0 %}
+      <div class="stat-rate-wrap">
+        <div class="stat-rate-num" style="color: {% if _rate >= 70 %}#4CAF50{% elif _rate >= 40 %}#FF9800{% else %}#f44336{% endif %}">
+          {{ _rate }}%
+        </div>
+        <div class="stat-rate-label">완료율</div>
+      </div>
+      <div class="stat-3col">
+        <div class="stat-item stat-red">
+          <div class="stat-big">{{ status_count['접수대기'] }}</div>
+          <div class="stat-name">접수대기</div>
+        </div>
+        <div class="stat-item stat-orange">
+          <div class="stat-big">{{ status_count['처리중'] }}</div>
+          <div class="stat-name">처리중</div>
+        </div>
+        <div class="stat-item stat-green">
+          <div class="stat-big">{{ status_count['완료'] }}</div>
+          <div class="stat-name">완료</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 월별 추이 막대 -->
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <h3>📅 월별 민원 추이</h3>
+        <p>월별 접수 건수 현황</p>
+      </div>
+      <canvas id="monthlyBar" style="max-height:220px"></canvas>
+    </div>
+
+  </div>
+
+  <!-- 스탯 Row 2 -->
+  <div class="chart-grid-bottom">
+
+    <!-- 솔루션별 랭킹 + 드롭다운 필터 -->
+    <div class="chart-box" style="overflow:visible">
+      <div class="rank-hdr">
+        <div class="rank-hdr-text">
+          <h3>🔧 솔루션별 민원 건수</h3>
+          <p>접수 많은 순 정렬</p>
+        </div>
+        <div class="filter-dd-wrap">
+          <button class="filter-dd-btn" id="solFilterBtn" onclick="toggleDD('sol')">
+            <span id="solFilterLabel">필터</span>
+            <span class="arrow">▾</span>
+          </button>
+          <div class="filter-dd" id="solDD">
+            <div class="filter-dd-opt all-opt" onclick="applyDD('sol','')">전체 보기</div>
+            {% for sol in solution_count.keys() %}
+            <div class="filter-dd-opt" data-val="{{ sol }}" onclick="applyDD('sol','{{ sol }}')">{{ sol }}</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% set sol_max = solution_count.values() | max if solution_count else 1 %}
+      <div class="rank-list">
+        {% for sol, cnt in solution_count.items() %}
+        <div class="rank-item">
+          <span class="rank-no {% if loop.index == 1 %}r1{% elif loop.index == 2 %}r2{% elif loop.index == 3 %}r3{% endif %}">{{ loop.index }}</span>
+          <span class="rank-name" title="{{ sol }}">{{ sol }}</span>
+          <div class="rank-bar-wrap">
+            <div class="rank-bar" style="width:{{ (cnt / sol_max * 100) | int }}%"></div>
+          </div>
+          <span class="rank-val">{{ cnt }}건</span>
+        </div>
+        {% else %}
+        <div style="text-align:center;color:#ccc;padding:20px;font-size:13px">데이터 없음</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- 병동별 랭킹 + 드롭다운 필터 -->
+    <div class="chart-box" style="overflow:visible">
+      <div class="rank-hdr">
+        <div class="rank-hdr-text">
+          <h3>🏥 병동별 민원 건수</h3>
+          <p>접수 많은 순 정렬</p>
+        </div>
+        <div class="filter-dd-wrap">
+          <button class="filter-dd-btn" id="wardFilterBtn" onclick="toggleDD('ward')">
+            <span id="wardFilterLabel">필터</span>
+            <span class="arrow">▾</span>
+          </button>
+          <div class="filter-dd" id="wardDD">
+            <div class="filter-dd-opt all-opt" onclick="applyDD('ward','')">전체 보기</div>
+            {% for ward_name in ward_count.keys() %}
+            <div class="filter-dd-opt" data-val="{{ ward_name }}" onclick="applyDD('ward','{{ ward_name }}')">{{ ward_name }}</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% set ward_max = ward_count.values() | max if ward_count else 1 %}
+      <div class="rank-list">
+        {% for ward_name, cnt in ward_count.items() %}
+        <div class="rank-item">
+          <span class="rank-no {% if loop.index == 1 %}r1{% elif loop.index == 2 %}r2{% elif loop.index == 3 %}r3{% endif %}">{{ loop.index }}</span>
+          <span class="rank-name">{{ ward_name }}</span>
+          <div class="rank-bar-wrap">
+            <div class="rank-bar" style="width:{{ (cnt / ward_max * 100) | int }}%; background: linear-gradient(90deg,#2196F3,#64B5F6)"></div>
+          </div>
+          <span class="rank-val">{{ cnt }}건</span>
+        </div>
+        {% else %}
+        <div style="text-align:center;color:#ccc;padding:20px;font-size:13px">데이터 없음</div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 필터 -->
+  <div class="filter-bar">
+    <span style="font-size:14px">🔍</span>
+    <input type="text"  id="fWard"     placeholder="병동 검색"    oninput="applyFilter()">
+    <select             id="fSolution"                            onchange="applyFilter()">
+      <option value="">전체 솔루션</option>
+      <option>자산비콘</option><option>환자비콘</option><option>수액</option>
+      <option>스마트저울</option><option>스마트혈압계</option>
+      <option>스마트체온계(비접촉)</option><option>스마트체온계(고막)</option>
+      <option>스마트신장계</option><option>스마트워치</option>
+      <option>병상용모니터</option><option>인포보드</option>
+      <option>스캐너</option><option>냉장고센서</option>
+    </select>
+    <select             id="fStatus"                              onchange="applyFilter()">
+      <option value="">전체 상태</option>
+      <option>접수대기</option><option>처리중</option><option>완료</option>
+    </select>
+    <button class="btn-clear" onclick="clearFilter()">✕ 초기화</button>
+  </div>
+
+  <!-- 테이블 -->
+  <div class="table-wrap">
+    <div class="table-head-bar">
+      <h3>📋 접수 목록</h3>
+      <span class="count-tag" id="rowCount">{{ total }}건</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>NO</th>
+          <th>병동</th>
+          <th>솔루션</th>
+          <th>문제 유형</th>
+          <th>상세 내용</th>
+          <th>상태 / 액션</th>
+          <th>접수 시간</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        {% if data %}
+          {% for row in data %}
+          {% set status = row.status if row.status else '접수대기' %}
+          <tr id="row-{{ row.id }}"
+              data-ward="{{ row.ward }}"
+              data-solution="{{ row.solution }}"
+              data-status="{{ status }}"
+              data-month="{{ row.created_at[0:7] if row.created_at else '' }}">
+            <td class="id-cell">#{{ row.id }}</td>
+            <td class="ward-cell">{{ row.ward }}</td>
+            <td><span class="sol-tag">{{ row.solution }}</span></td>
+            <td class="issue-cell">{{ row.issue }}</td>
+            <td class="desc-cell" title="{{ row.description }}">{{ row.description }}</td>
+            <td>
+              <div class="action-area" id="action-{{ row.id }}">
+                {% if status == '접수대기' %}
+                  <span class="status-chip s-접수대기">접수대기</span>
+                  <button class="btn-accept" onclick="doAction({{ row.id }}, 'accept')">
+                    접수하기 →
+                  </button>
+                {% elif status == '처리중' %}
+                  <span class="status-chip s-처리중">처리중</span>
+                  <button class="btn-complete" onclick="doAction({{ row.id }}, 'complete')">
+                    완료 ✓
+                  </button>
+                {% else %}
+                  <span class="status-chip s-완료">✓ 완료</span>
+                {% endif %}
+              </div>
+            </td>
+            <td class="time-cell">{{ row.created_at }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="7" class="empty-td">📭 접수된 민원이 없습니다</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+</div><!-- /panel-complaints -->
+</div><!-- /main -->
+
+<!-- 계정 관리 패널 -->
+<div class="tab-panel" id="panel-accounts">
+<div class="acc-wrap">
+
+  <!-- 계정 추가 -->
+  <div class="acc-add-card">
+    <h3>➕ 병동 계정 추가</h3>
+    <div class="acc-add-row">
+      <div class="acc-field">
+        <label>병동명 (아이디)</label>
+        <input type="text" id="newUsername" placeholder="예: 3내과">
+      </div>
+      <div class="acc-field">
+        <label>비밀번호</label>
+        <input type="password" id="newPassword" placeholder="비밀번호 입력">
+      </div>
+      <button class="btn-add-acc" onclick="addAccount()">계정 추가</button>
+    </div>
+    <div class="acc-err" id="accErr"></div>
+    <div class="acc-ok"  id="accOk"></div>
+  </div>
+
+  <!-- 계정 목록 -->
+  <div class="acc-table-wrap">
+    <div class="acc-table-head">
+      <h3>🏥 등록된 병동 계정</h3>
+      <span class="acc-count" id="accCount">{{ accounts|length }}개</span>
+    </div>
+    <table class="acc-table">
+      <thead>
+        <tr>
+          <th>병동명</th>
+          <th>접속 URL (간호사에게 공유)</th>
+          <th>등록일</th>
+          <th>관리</th>
+        </tr>
+      </thead>
+      <tbody id="accTableBody">
+        {% if accounts %}
+          {% for acc in accounts %}
+          <tr id="acc-row-{{ acc.id }}">
+            <td class="ward-name">{{ acc.username }}</td>
+            <td>
+              <div class="url-cell">
+                <span class="url-text" id="url-{{ acc.id }}">http://127.0.0.1:5001/ward?key={{ acc.access_key }}</span>
+                <button class="btn-copy" onclick="copyUrl({{ acc.id }})">복사</button>
+              </div>
+            </td>
+            <td class="created-at">{{ acc.created_at }}</td>
+            <td>
+              <button class="btn-reset" onclick="toggleReset({{ acc.id }})">🔑 비번 변경</button>
+              <button class="btn-del"   onclick="deleteAccount({{ acc.id }}, '{{ acc.username }}')">삭제</button>
+              <div class="reset-row" id="reset-{{ acc.id }}">
+                <input type="password" id="rpw-{{ acc.id }}" placeholder="새 비밀번호">
+                <button class="btn-confirm-reset" onclick="confirmReset({{ acc.id }})">변경</button>
+                <button class="btn-cancel-reset"  onclick="toggleReset({{ acc.id }})">취소</button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="3" class="empty-acc">등록된 병동 계정이 없습니다</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</div><!-- /panel-accounts -->
+
+<div id="toast"></div>
+
+<script>
+  /* ── 월별 막대 차트 ── */
+  const monthLabels = {{ monthly_count.keys() | list | tojson }};
+  const monthData   = {{ monthly_count.values() | list | tojson }};
+  const monthlyChartInst = new Chart(document.getElementById('monthlyBar'), {
+    type: 'bar',
+    data: {
+      labels: monthLabels,
+      datasets: [{
+        label: '민원 건수',
+        data: monthData,
+        backgroundColor: monthLabels.map((_, i) =>
+          i === monthLabels.length - 1 ? 'rgba(76,175,80,0.9)' : 'rgba(76,175,80,0.35)'
+        ),
+        borderColor: monthLabels.map((_, i) =>
+          i === monthLabels.length - 1 ? '#2e7d32' : '#4CAF50'
+        ),
+        borderWidth: 1.5,
+        borderRadius: 8,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y}건` } }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f0f0f0' } },
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+
+  /* ── 액션 (접수하기 / 완료) ── */
+  function doAction(id, act) {
+    fetch('/action?key=' + MY_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `id=${id}&action=${act}`
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) { showToast('⚠️ 오류가 발생했습니다'); return; }
+
+      const newStatus = data.status;
+      const row = document.getElementById('row-' + id);
+      row.dataset.status = newStatus;
+
+      // 액션 영역 재렌더링
+      const area = document.getElementById('action-' + id);
+      if (newStatus === '처리중') {
+        area.innerHTML =
+          '<span class="status-chip s-처리중">처리중</span>' +
+          `<button class="btn-complete" onclick="doAction(${id},'complete')">완료 ✓</button>`;
+        showToast(`#${id} → 처리중으로 접수되었습니다`);
+      } else if (newStatus === '완료') {
+        area.innerHTML = '<span class="status-chip s-완료">✓ 완료</span>';
+        showToast(`#${id} → 완료 처리되었습니다`);
+      }
+    })
+    .catch(() => showToast('⚠️ 네트워크 오류'));
+  }
+
+  /* ── 필터 ── */
+  function applyFilter() {
+    const ward     = document.getElementById('fWard').value.toLowerCase();
+    const solution = document.getElementById('fSolution').value;
+    const status   = document.getElementById('fStatus').value;
+    const rows     = document.querySelectorAll('#tableBody tr[data-ward]');
+    let   visible  = 0;
+
+    rows.forEach(r => {
+      const ok = (!ward     || r.dataset.ward.toLowerCase().includes(ward))
+              && (!solution || r.dataset.solution === solution)
+              && (!status   || r.dataset.status   === status);
+      r.style.display = ok ? '' : 'none';
+      if (ok) visible++;
+    });
+    document.getElementById('rowCount').textContent = visible + '건';
+    // 월별 차트는 건드리지 않음 — 독립적으로 항상 전체 데이터 표시
+  }
+
+  function clearFilter() {
+    ['fWard','fSolution','fStatus'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    applyFilter();
+  }
+
+  /* ══════════════════════════════════════════
+     랭킹 카드 드롭다운 필터
+     ─ 테이블/차트와 완전히 독립
+     ─ 랭킹 카드 내부 하이라이트만 변경
+  ══════════════════════════════════════════ */
+  function toggleDD(type) {
+    const dd  = document.getElementById(type === 'sol' ? 'solDD'  : 'wardDD');
+    const btn = document.getElementById(type === 'sol' ? 'solFilterBtn' : 'wardFilterBtn');
+    const isOpen = dd.classList.contains('open');
+    ['solDD','wardDD'].forEach(id => document.getElementById(id).classList.remove('open'));
+    ['solFilterBtn','wardFilterBtn'].forEach(id => document.getElementById(id).classList.remove('open'));
+    if (!isOpen) { dd.classList.add('open'); btn.classList.add('open'); }
+  }
+
+  function applyDD(type, value) {
+    const isSol = type === 'sol';
+    const dd    = document.getElementById(isSol ? 'solDD'        : 'wardDD');
+    const btn   = document.getElementById(isSol ? 'solFilterBtn' : 'wardFilterBtn');
+    const label = document.getElementById(isSol ? 'solFilterLabel' : 'wardFilterLabel');
+    // ── 랭킹 리스트 행 하이라이트 (카드 내부만) ──
+    const card  = dd.closest('.chart-box');
+    card.querySelectorAll('.rank-item').forEach(row => {
+      const match = row.querySelector('.rank-name')?.textContent.trim() === value;
+      row.style.background  = (value && match) ? '#e8f5e9' : '';
+      row.style.fontWeight  = (value && match) ? '800'     : '';
+      row.style.borderRadius = (value && match) ? '8px'    : '';
+    });
+    // ── 버튼 레이블 ──
+    if (value) {
+      btn.classList.add('on');
+      label.textContent = value.length > 6 ? value.slice(0, 6) + '…' : value;
+    } else {
+      btn.classList.remove('on');
+      label.textContent = '필터';
+    }
+    // ── 드롭다운 옵션 체크 표시 ──
+    dd.querySelectorAll('.filter-dd-opt').forEach(opt => {
+      opt.classList.toggle('active', opt.dataset.val === value && value !== '');
+    });
+    dd.classList.remove('open');
+    btn.classList.remove('open');
+    // ── 테이블·차트 일절 건드리지 않음 ──
+  }
+
+  // 드롭다운 외부 클릭 시 닫기
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.filter-dd-wrap')) {
+      ['solDD','wardDD'].forEach(id => document.getElementById(id)?.classList.remove('open'));
+      ['solFilterBtn','wardFilterBtn'].forEach(id => document.getElementById(id)?.classList.remove('open'));
+    }
+  });
+
+  /* ── 현재 탭의 접속 키 ── */
+  const MY_KEY = new URLSearchParams(window.location.search).get('key') || '{{ key }}';
+
+  /* ── 실시간 폴링 (새 민원 감지) ── */
+  let lastKnownTime  = '';   // 마지막으로 확인한 최신 created_at
+  let pendingNewCount = 0;
+  let pollTimer = null;
+
+  function initPoll() {
+    fetch('/api/poll?key=' + MY_KEY)
+      .then(r => r.json())
+      .then(data => {
+        // 민원이 없어도 현재 시각을 기준으로 설정 → 이후 접수된 민원 감지
+        lastKnownTime = data.latest_time || new Date().toISOString().slice(0,19).replace('T',' ');
+        pollTimer = setInterval(doPoll, 10000);   // 10초 간격
+      })
+      .catch(() => {});
+  }
+
+  function doPoll() {
+    fetch('/api/poll?key=' + MY_KEY + '&since=' + encodeURIComponent(lastKnownTime))
+      .then(r => r.json())
+      .then(data => {
+        if (data.new_count > 0) {
+          pendingNewCount += data.new_count;
+          lastKnownTime = data.latest_time;   // 기준 시각 갱신
+          showAlertBanner(pendingNewCount, data.new_complaints);
+          updateKpiLive(data.status_counts, data.total);
+        }
+      })
+      .catch(() => {});
+  }
+
+  /* ── 벨 패널 ── */
+  let allNewComplaints = [];
+
+  function toggleBellPanel() {
+    const panel = document.getElementById('bellPanel');
+    const isOpen = panel.classList.contains('open');
+    panel.classList.toggle('open', !isOpen);
+    if (!isOpen) {
+      // 패널 열면 배지 숨기기
+      document.getElementById('bellBadge').style.display = 'none';
+    }
+    // 외부 클릭 닫기 리스너
+    setTimeout(() => {
+      if (!isOpen) document.addEventListener('click', closeBellOnOutside);
+    }, 10);
+  }
+
+  function closeBellPanel() {
+    document.getElementById('bellPanel').classList.remove('open');
+    document.removeEventListener('click', closeBellOnOutside);
+  }
+
+  function closeBellOnOutside(e) {
+    if (!e.target.closest('#bellWrap')) {
+      closeBellPanel();
+    }
+  }
+
+  function renderBellPanel() {
+    const list = document.getElementById('bellPanelList');
+    if (allNewComplaints.length === 0) {
+      list.innerHTML = '<div class="bell-empty">새로운 민원 알림이 없습니다</div>';
+      return;
+    }
+    list.innerHTML = allNewComplaints.map(c => `
+      <div class="bell-item">
+        <div class="bell-dot"></div>
+        <div class="bell-item-body">
+          <div class="bell-item-title">#${c.id} ${c.ward} — ${c.solution}</div>
+          <div class="bell-item-sub">${c.issue || ''} · ${(c.created_at||'').slice(0,16)}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  function showAlertBanner(count, newItems) {
+    const banner = document.getElementById('alertBanner');
+    const text   = document.getElementById('alertText');
+    const badge  = document.getElementById('bellBadge');
+
+    // 새 민원 배열에 추가 (중복 방지)
+    newItems.forEach(c => {
+      if (!allNewComplaints.find(x => x.id === c.id)) allNewComplaints.unshift(c);
+    });
+    renderBellPanel();
+
+    const wardNames = [...new Set(newItems.map(c => c.ward))].slice(0, 3).join(', ');
+    text.textContent = `새 민원 ${count}건 접수 — ${wardNames}`;
+    banner.classList.add('show');
+
+    badge.textContent = allNewComplaints.length > 9 ? '9+' : allNewComplaints.length;
+    badge.style.display = 'flex';
+
+    showToast(`🔴 새 민원 ${count}건이 접수되었습니다`);
+  }
+
+  function dismissAlert() {
+    document.getElementById('alertBanner').classList.remove('show');
+    pendingNewCount = 0;
+  }
+
+  function refreshAndDismiss() {
+    dismissAlert();
+    location.href = '/admin?key=' + MY_KEY;
+  }
+
+  /* ── 1분 자동 싱크 ── */
+  let syncSec = 60;
+  function startSyncCountdown() {
+    const label = document.getElementById('syncLabel');
+    const badge = document.getElementById('syncBadge');
+    syncSec = 60;
+    const tick = setInterval(() => {
+      syncSec--;
+      const m = Math.floor(syncSec / 60);
+      const s = syncSec % 60;
+      label.textContent = `${m}:${String(s).padStart(2,'0')}`;
+      if (syncSec <= 0) {
+        clearInterval(tick);
+        badge.classList.add('syncing');
+        label.textContent = '업데이트 중…';
+        setTimeout(() => { location.href = '/admin?key=' + MY_KEY; }, 400);
+      }
+    }, 1000);
+  }
+  document.addEventListener('DOMContentLoaded', startSyncCountdown);
+
+  // KPI 숫자 실시간 업데이트 (페이지 리로드 없이)
+  function updateKpiLive(statusCounts, total) {
+    const kpiMap = {
+      'total': total,
+      'wait':  statusCounts['접수대기'] || 0,
+      'prog':  statusCounts['처리중']   || 0,
+      'done':  statusCounts['완료']     || 0,
+    };
+    Object.entries(kpiMap).forEach(([cls, val]) => {
+      const el = document.querySelector(`.kpi-card.${cls} .kpi-val`);
+      if (el) el.textContent = val;
+    });
+  }
+
+  // 페이지 로드 후 폴링 시작
+  document.addEventListener('DOMContentLoaded', initPoll);
+
+  /* ── 탭 전환 ── */
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + tab).classList.add('active');
+    document.getElementById(tab === 'complaints' ? 'tab1' : 'tab2').classList.add('active');
+  }
+
+  /* ── 계정 추가 ── */
+  function addAccount() {
+    const username = document.getElementById('newUsername').value.trim();
+    const password = document.getElementById('newPassword').value.trim();
+    const errEl = document.getElementById('accErr');
+    const okEl  = document.getElementById('accOk');
+    errEl.style.display = 'none';
+    okEl.style.display  = 'none';
+
+    if (!username || !password) {
+      errEl.textContent = '병동명과 비밀번호를 모두 입력해주세요';
+      errEl.style.display = 'block'; return;
+    }
+
+    fetch('/admin/accounts/add?key=' + MY_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username, password })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        okEl.textContent = `✅ "${username}" 계정이 추가되었습니다`;
+        okEl.style.display = 'block';
+        document.getElementById('newUsername').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('accCount').textContent =
+          (parseInt(document.getElementById('accCount').textContent) + 1) + '개';
+        // 테이블에 행 추가
+        const tbody = document.getElementById('accTableBody');
+        const emptyRow = tbody.querySelector('.empty-acc');
+        if (emptyRow) emptyRow.closest('tr').remove();
+        const now = new Date().toISOString().slice(0,19).replace('T',' ');
+        const wardUrl = `${location.origin}/ward?key=${data.access_key}`;
+        tbody.insertAdjacentHTML('afterbegin', `
+          <tr id="acc-row-${data.id}">
+            <td class="ward-name">${data.username}</td>
+            <td>
+              <div class="url-cell">
+                <span class="url-text" id="url-${data.id}">${wardUrl}</span>
+                <button class="btn-copy" onclick="copyUrl(${data.id})">복사</button>
+              </div>
+            </td>
+            <td class="created-at">${now}</td>
+            <td>
+              <button class="btn-reset" onclick="toggleReset(${data.id})">🔑 비번 변경</button>
+              <button class="btn-del"   onclick="deleteAccount(${data.id},'${data.username}')">삭제</button>
+              <div class="reset-row" id="reset-${data.id}">
+                <input type="password" id="rpw-${data.id}" placeholder="새 비밀번호">
+                <button class="btn-confirm-reset" onclick="confirmReset(${data.id})">변경</button>
+                <button class="btn-cancel-reset"  onclick="toggleReset(${data.id})">취소</button>
+              </div>
+            </td>
+          </tr>`);
+      } else {
+        errEl.textContent = data.error || '오류가 발생했습니다';
+        errEl.style.display = 'block';
+      }
+    });
+  }
+
+  /* ── 계정 삭제 ── */
+  function deleteAccount(id, name) {
+    if (!confirm(`"${name}" 계정을 삭제할까요?\n해당 병동의 민원 데이터는 유지됩니다.`)) return;
+    fetch('/admin/accounts/delete?key=' + MY_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ id })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        document.getElementById('acc-row-' + id)?.remove();
+        showToast(`"${name}" 계정이 삭제되었습니다`);
+      }
+    });
+  }
+
+  /* ── 비밀번호 변경 ── */
+  function toggleReset(id) {
+    const row = document.getElementById('reset-' + id);
+    row.style.display = row.style.display === 'flex' ? 'none' : 'flex';
+  }
+
+  function confirmReset(id) {
+    const pw = document.getElementById('rpw-' + id).value.trim();
+    if (!pw) { alert('새 비밀번호를 입력해주세요'); return; }
+    fetch('/admin/accounts/reset?key=' + MY_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ id, password: pw })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        showToast('비밀번호가 변경되었습니다');
+        toggleReset(id);
+        document.getElementById('rpw-' + id).value = '';
+      }
+    });
+  }
+
+  /* ── URL 복사 ── */
+  function copyUrl(id) {
+    const urlEl = document.getElementById('url-' + id);
+    const btn   = urlEl.closest('.url-cell').querySelector('.btn-copy');
+    navigator.clipboard.writeText(urlEl.textContent).then(() => {
+      btn.textContent = '✓ 복사됨';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  /* ── 토스트 ── */
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+</script>
+</body>
+</html>

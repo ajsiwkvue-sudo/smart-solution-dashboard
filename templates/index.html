@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>스마트솔루션 고장 문의</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Arial', sans-serif;
+    background: linear-gradient(135deg, #f0f4ff 0%, #e8f5e9 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+
+  .container {
+    background: white;
+    padding: 40px 36px;
+    width: 440px;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  .header .icon {
+    font-size: 36px;
+    margin-bottom: 10px;
+  }
+
+  .header h2 {
+    font-size: 20px;
+    color: #1a1a2e;
+    font-weight: 700;
+  }
+
+  .header p {
+    color: #999;
+    font-size: 13px;
+    margin-top: 6px;
+  }
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  input, select, textarea {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 14px;
+    color: #333;
+    background: #fafafa;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+    font-family: inherit;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.12);
+    background: white;
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 90px;
+  }
+
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+  }
+
+  button {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #4CAF50, #43A047);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 8px;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+
+  button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+  }
+
+  button:active {
+    transform: translateY(0);
+  }
+
+  .divider {
+    height: 1px;
+    background: #f0f0f0;
+    margin: 20px 0;
+  }
+</style>
+</head>
+
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="icon">🏥</div>
+    <h2>스마트솔루션 고장 문의</h2>
+    <p>접수하시면 담당자가 신속히 처리해 드립니다</p>
+  </div>
+
+  <form action="/submit" method="post">
+
+    <div class="form-group">
+      <label>🏢 병동</label>
+      <input list="ward-list" name="ward" placeholder="병동을 입력해주세요 (예: 3내과)" required>
+    </div>
+
+    <div class="form-group">
+      <label>💡 솔루션</label>
+      <select id="solution" name="solution" required>
+        <option value="">선택하세요</option>
+        <option value="자산비콘">자산비콘</option>
+        <option value="환자비콘">환자비콘</option>
+        <option value="수액">수액속도모니터링</option>
+        <option value="스마트저울">스마트저울</option>
+        <option value="스마트혈압계">스마트혈압계</option>
+        <option value="스마트체온계(비접촉)">스마트체온계(비접촉)</option>
+        <option value="스마트체온계(고막)">스마트체온계(고막)</option>
+        <option value="스마트신장계">스마트신장계</option>
+        <option value="스마트워치">스마트워치</option>
+        <option value="병상용모니터">병상용모니터</option>
+        <option value="인포보드">인포보드</option>
+        <option value="스캐너">스캐너</option>
+        <option value="냉장고센서">냉장고온도센서</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>⚠️ 문제 유형</label>
+      <select id="issue" name="issue" required>
+        <option value="">먼저 솔루션을 선택하세요</option>
+      </select>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="form-group">
+      <label>📝 상세 내용 (선택)</label>
+      <textarea name="description" placeholder="추가로 설명하실 내용을 입력해주세요"></textarea>
+    </div>
+
+    <button type="submit">접수하기 →</button>
+
+  </form>
+</div>
+
+<script>
+const issueMap = {
+  "자산비콘": ["이름/번호 불일치", "신호상실", "신규신청", "자산불용/폐기", "분실", "기타"],
+  "환자비콘": ["고장(파손)", "분실", "신호상실", "기타"],
+  "수액": ["부속품 분실/파손", "수액 연동안됨", "수액센서이상", "수액기기 고장(파손)", "수액기기 분실", "기타"],
+  "스마트저울": ["바코드스캐너 접촉불량", "바코드보드 인식오류", "TPR 연동안됨", "저울 무게 이상", "기타"],
+  "스마트혈압계": ["PDA 연동안됨", "바코드 훼손", "기타"],
+  "스마트체온계(비접촉)": ["PDA 연동안됨", "바코드 훼손", "기타"],
+  "스마트체온계(고막)": ["PDA 연동안됨", "바코드 훼손", "기타"],
+  "스마트신장계": ["팔찌바코드 이상"],
+  "스마트워치": ["앱 접속 오류", "워치 고장(파손)", "기타"],
+  "병상용모니터": ["네트워크 오류", "기타"],
+  "인포보드": ["네트워크 오류", "기타"],
+  "스캐너": ["네트워크 오류", "기타"],
+  "냉장고센서": ["전원꺼짐", "센서범위 이상", "기기 고장/파손", "신호상실", "기타"]
+};
+
+const solution = document.getElementById("solution");
+const issue = document.getElementById("issue");
+
+solution.addEventListener("change", function() {
+  const selected = this.value;
+  issue.innerHTML = "";
+
+  if (issueMap[selected]) {
+    issueMap[selected].forEach(item => {
+      let option = document.createElement("option");
+      option.value = item;
+      option.text = item;
+      issue.appendChild(option);
+    });
+  } else {
+    let option = document.createElement("option");
+    option.value = "";
+    option.text = "먼저 솔루션을 선택하세요";
+    issue.appendChild(option);
+  }
+});
+</script>
+
+</body>
+</html>

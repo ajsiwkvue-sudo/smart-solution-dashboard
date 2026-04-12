@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ ward }} 민원 현황</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Arial', sans-serif;
+      background: #f0f2f7;
+      min-height: 100vh;
+    }
+
+    /* ── 헤더 ── */
+    .topbar {
+      background: white;
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      position: sticky; top: 0; z-index: 50;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
+    .topbar-left h1 { font-size: 17px; font-weight: 700; }
+    .ward-chip {
+      background: #e8f5e9; color: #2e7d32;
+      padding: 4px 12px; border-radius: 20px;
+      font-size: 13px; font-weight: 700;
+    }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .sync-badge {
+      font-size: 11px; font-weight: 700; color: #aaa;
+      display: flex; align-items: center; gap: 4px; padding: 5px 10px;
+      border-radius: 8px; background: #f5f5f5;
+    }
+    .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #ccc; }
+    .btn-logout {
+      background: #f5f5f5; color: #888;
+      border: none; border-radius: 8px;
+      padding: 8px 14px; font-size: 13px;
+      cursor: pointer; font-family: inherit;
+      transition: background .2s; text-decoration: none;
+    }
+    .btn-logout:hover { background: #eee; color: #555; }
+
+    /* ── 본문 ── */
+    .main { padding: 24px 20px; max-width: 800px; margin: 0 auto; }
+
+    /* ── KPI ── */
+    .kpi-row {
+      display: grid; grid-template-columns: repeat(4,1fr); gap: 12px;
+      margin-bottom: 18px;
+    }
+    .kpi-card {
+      background: white; border-radius: 14px; padding: 16px 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.05); text-align: center;
+      transition: transform .2s;
+    }
+    .kpi-card:hover { transform: translateY(-3px); }
+    .kpi-icon  { font-size: 20px; margin-bottom: 6px; }
+    .kpi-label { font-size: 11px; color: #aaa; font-weight: 700; margin-bottom: 4px; }
+    .kpi-val   { font-size: 26px; font-weight: 800; line-height: 1; }
+    .kpi-card.total .kpi-val { color: #3d5afe; }
+    .kpi-card.wait  .kpi-val { color: #f44336; }
+    .kpi-card.prog  .kpi-val { color: #FF9800; }
+    .kpi-card.done  .kpi-val { color: #4CAF50; }
+
+    /* ── 스탯/차트 공통 ── */
+    .stat-chart-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .monthly-row {
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: white; border-radius: 14px; padding: 16px 18px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.05);
+    }
+    .stat-box-hd { margin-bottom: 12px; }
+    .stat-box-hd h3 { font-size: 12px; font-weight: 800; color: #333; }
+    .stat-box-hd p  { font-size: 10px; color: #bbb; margin-top: 1px; }
+
+    /* 처리현황 숫자 */
+    .status-rate-wrap { text-align: center; padding: 6px 0 12px; border-bottom: 1px solid #f5f5f5; margin-bottom: 12px; }
+    .status-rate-num  { font-size: 40px; font-weight: 900; line-height: 1; }
+    .status-rate-lbl  { font-size: 11px; color: #aaa; font-weight: 600; margin-top: 3px; }
+    .status-3col { display: flex; justify-content: space-around; }
+    .status-item { text-align: center; }
+    .status-num  { font-size: 28px; font-weight: 900; line-height: 1; }
+    .status-lbl  { font-size: 10px; color: #aaa; font-weight: 600; margin-top: 3px; }
+    .s-num-red    .status-num { color: #f44336; }
+    .s-num-orange .status-num { color: #FF9800; }
+    .s-num-green  .status-num { color: #4CAF50; }
+
+    /* 랭킹 리스트 */
+    .rank-list { display: flex; flex-direction: column; gap: 7px; }
+    .rank-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 10px; background: #fafbff;
+    }
+    .rank-no {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #e8eaf6; color: #5c6bc0;
+      font-size: 10px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .rank-no.r1 { background: #fff8e1; color: #f9a825; }
+    .rank-no.r2 { background: #f5f5f5; color: #757575; }
+    .rank-no.r3 { background: #fbe9e7; color: #bf360c; }
+    .rank-name { font-size: 11px; font-weight: 700; color: #333; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .rank-bar-wrap { flex: 2; height: 5px; background: #f0f0f0; border-radius: 3px; overflow: hidden; }
+    .rank-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg,#4CAF50,#81C784); }
+    .rank-val { font-size: 11px; font-weight: 800; color: #333; white-space: nowrap; min-width: 24px; text-align: right; }
+
+    /* 월별 차트 박스 */
+    .monthly-box {
+      background: white; border-radius: 14px; padding: 16px 18px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.05);
+    }
+    .monthly-box canvas { display: block; max-height: 140px; }
+
+    @media (max-width: 600px) {
+      .stat-chart-row { grid-template-columns: 1fr; }
+    }
+
+    /* ── 섹션 헤더 ── */
+    .section-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px; padding: 0 2px;
+    }
+    .section-title { font-size: 14px; font-weight: 700; color: #333; }
+    .count-tag {
+      background: white; color: #666; padding: 4px 12px;
+      border-radius: 20px; font-size: 12px; font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0,0,0,.06);
+    }
+
+    /* ── 솔루션 드롭다운 필터 ── */
+    .rank-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .rank-hdr-text h3 { font-size: 12px; font-weight: 800; color: #333; }
+    .rank-hdr-text p  { font-size: 10px; color: #bbb; margin-top: 1px; }
+    .filter-dd-wrap   { position: relative; }
+    .filter-dd-btn {
+      display: flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 20px;
+      border: 1.5px solid #e0e0e0; background: white;
+      font-size: 11px; font-weight: 700; cursor: pointer;
+      color: #666; font-family: inherit; transition: all .2s;
+      white-space: nowrap;
+    }
+    .filter-dd-btn:hover { border-color: #4CAF50; color: #4CAF50; }
+    .filter-dd-btn.on   { background: #4CAF50; border-color: #4CAF50; color: white; }
+    .filter-dd-btn .arrow { font-size: 9px; transition: transform .2s; }
+    .filter-dd-btn.open .arrow { transform: rotate(180deg); }
+    .filter-dd {
+      position: absolute; right: 0; top: calc(100% + 4px);
+      background: white; border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.14);
+      border: 1px solid #f0f0f0;
+      min-width: 160px; z-index: 200;
+      overflow: hidden; display: none;
+    }
+    .filter-dd.open { display: block; }
+    .filter-dd-opt {
+      padding: 8px 14px; font-size: 12px; cursor: pointer;
+      color: #444; transition: background .12s; font-weight: 600;
+    }
+    .filter-dd-opt:hover { background: #f5f5f5; }
+    .filter-dd-opt.active { background: #e8f5e9; color: #2e7d32; }
+    .filter-dd-opt.all-opt { border-bottom: 1px solid #f5f5f5; color: #888; font-weight: 700; }
+
+    /* ── 민원 카드 ── */
+    .complaint-card {
+      background: white; border-radius: 14px; padding: 16px 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.05); margin-bottom: 10px;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .complaint-card:hover { transform: translateY(-2px); box-shadow: 0 5px 16px rgba(0,0,0,.08); }
+
+    .card-top {
+      display: flex; justify-content: space-between;
+      align-items: flex-start; margin-bottom: 8px;
+    }
+    .card-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .card-num  { font-size: 12px; color: #ccc; font-weight: 700; }
+    .sol-tag   {
+      background: #e8f5e9; color: #2e7d32;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 700;
+    }
+    .issue-text { font-size: 13px; font-weight: 700; color: #222; }
+
+    .status-badge {
+      padding: 5px 13px; border-radius: 20px;
+      font-size: 12px; font-weight: 700; white-space: nowrap;
+    }
+    .s-접수대기 { background: #fce4ec; color: #c62828; }
+    .s-처리중   { background: #fff8e1; color: #e65100; }
+    .s-완료     { background: #e8f5e9; color: #2e7d32; }
+
+    .desc-text { font-size: 12px; color: #aaa; margin-bottom: 10px; }
+
+    /* 타임라인 */
+    .timeline { display: flex; align-items: center; padding-top: 10px; border-top: 1px solid #f5f5f5; }
+    .tl-step  { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+    .tl-step:not(:last-child)::after {
+      content: ''; position: absolute; top: 11px; left: 50%;
+      width: 100%; height: 2px; background: #eee; z-index: 0;
+    }
+    .tl-step.done:not(:last-child)::after   { background: #4CAF50; }
+    .tl-step.active:not(:last-child)::after { background: linear-gradient(to right,#4CAF50,#eee); }
+    .tl-dot {
+      width: 22px; height: 22px; border-radius: 50%; background: #eee; color: #bbb;
+      font-size: 10px; font-weight: 700; display: flex; align-items: center;
+      justify-content: center; position: relative; z-index: 1;
+    }
+    .tl-step.done   .tl-dot { background: #4CAF50; color: white; }
+    .tl-step.active .tl-dot { background: #FF9800; color: white; box-shadow: 0 0 0 4px rgba(255,152,0,.18); }
+    .tl-label { font-size: 10px; color: #bbb; margin-top: 4px; font-weight: 600; }
+    .tl-step.done   .tl-label { color: #4CAF50; }
+    .tl-step.active .tl-label { color: #FF9800; }
+    .card-time { font-size: 11px; color: #ccc; margin-top: 6px; }
+
+    /* ── 빈 상태 ── */
+    .empty-box {
+      background: white; border-radius: 16px; padding: 60px 20px;
+      text-align: center; color: #bbb;
+      box-shadow: 0 2px 12px rgba(0,0,0,.05);
+    }
+    .empty-box .ei { font-size: 48px; margin-bottom: 14px; }
+    .empty-box p   { font-size: 14px; line-height: 1.8; }
+
+    /* ── FAB 버튼 ── */
+    .fab {
+      position: fixed; bottom: 28px; right: 28px;
+      background: linear-gradient(135deg,#4CAF50,#43A047);
+      color: white; border: none; border-radius: 28px;
+      padding: 14px 24px; font-size: 15px; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+      box-shadow: 0 6px 20px rgba(76,175,80,.4);
+      display: flex; align-items: center; gap: 8px;
+      transition: all .2s; z-index: 40;
+    }
+    .fab:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(76,175,80,.5); }
+
+    /* ── 모달 ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; padding: 20px;
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: white; border-radius: 20px; width: 100%; max-width: 460px;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 24px 60px rgba(0,0,0,.2);
+      transform: translateY(20px); transition: transform .25s;
+      padding: 32px 28px;
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+
+    .modal-header {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 6px;
+    }
+    .modal-title { font-size: 18px; font-weight: 800; color: #1a1a2e; }
+    .modal-ward  { font-size: 13px; color: #4CAF50; font-weight: 700; margin-bottom: 20px; }
+    .btn-close {
+      background: #f0f2f7; border: none; border-radius: 50%;
+      width: 32px; height: 32px; cursor: pointer; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-close:hover { background: #e0e3ed; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      font-size: 12px; font-weight: 700; color: #666;
+      display: block; margin-bottom: 6px;
+    }
+    .form-control {
+      width: 100%; padding: 11px 14px;
+      border: 1.5px solid #e0e0e0; border-radius: 10px;
+      font-size: 14px; color: #333; background: #fafafa;
+      outline: none; font-family: inherit;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .form-control:focus {
+      border-color: #4CAF50;
+      box-shadow: 0 0 0 3px rgba(76,175,80,.12);
+      background: white;
+    }
+    select.form-control {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 14px center;
+      background-size: 12px; padding-right: 36px;
+    }
+    textarea.form-control { resize: vertical; min-height: 80px; }
+
+    .btn-submit {
+      width: 100%; padding: 14px; margin-top: 8px;
+      background: linear-gradient(135deg,#4CAF50,#43A047);
+      color: white; border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit;
+      box-shadow: 0 4px 15px rgba(76,175,80,.3); transition: all .2s;
+    }
+    .btn-submit:hover { transform: translateY(-2px); }
+    .btn-submit:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+    .err-msg { color: #f44336; font-size: 13px; margin-bottom: 8px; display: none; }
+
+    /* 성공 상태 */
+    .success-state { text-align: center; padding: 10px 0; display: none; }
+    .success-icon {
+      width: 70px; height: 70px; border-radius: 50%;
+      background: linear-gradient(135deg,#4CAF50,#43A047);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 18px;
+      box-shadow: 0 8px 24px rgba(76,175,80,.35);
+      animation: pop .35s ease;
+    }
+    @keyframes pop {
+      0%  { transform: scale(.5); opacity: 0; }
+      80% { transform: scale(1.1); }
+      100%{ transform: scale(1);   opacity: 1; }
+    }
+    .success-icon svg { width: 36px; height: 36px; stroke: white; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .success-title { font-size: 18px; font-weight: 800; color: #1a1a2e; margin-bottom: 6px; }
+    .success-sub   { font-size: 13px; color: #999; margin-bottom: 16px; }
+    .success-num   { font-size: 32px; font-weight: 900; color: #4CAF50; margin-bottom: 24px; }
+    .btn-more {
+      width: 100%; padding: 13px; border: none; border-radius: 12px;
+      font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+      margin-bottom: 8px; transition: all .2s;
+    }
+    .btn-more.p { background: linear-gradient(135deg,#4CAF50,#43A047); color: white; box-shadow: 0 4px 14px rgba(76,175,80,.3); }
+    .btn-more.s { background: #f5f5f5; color: #555; }
+    .btn-more:hover { transform: translateY(-1px); }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>🏥 민원 현황</h1>
+    <span class="ward-chip">{{ ward }}</span>
+  </div>
+  <div class="topbar-right">
+    <div class="sync-badge">
+      <span class="sync-dot"></span>
+      <span id="wardSyncLabel">1:00</span>
+    </div>
+    <a href="/login" class="btn-logout">로그아웃</a>
+  </div>
+</div>
+
+<div class="main">
+
+  {% if complaints %}
+    <!-- KPI -->
+    <div class="kpi-row">
+      <div class="kpi-card total">
+        <div class="kpi-icon">📋</div>
+        <div class="kpi-label">전체</div>
+        <div class="kpi-val">{{ complaints|length }}</div>
+      </div>
+      <div class="kpi-card wait">
+        <div class="kpi-icon">🔴</div>
+        <div class="kpi-label">접수대기</div>
+        <div class="kpi-val">{{ status_count['접수대기'] }}</div>
+      </div>
+      <div class="kpi-card prog">
+        <div class="kpi-icon">🟡</div>
+        <div class="kpi-label">처리중</div>
+        <div class="kpi-val">{{ status_count['처리중'] }}</div>
+      </div>
+      <div class="kpi-card done">
+        <div class="kpi-icon">🟢</div>
+        <div class="kpi-label">완료</div>
+        <div class="kpi-val">{{ status_count['완료'] }}</div>
+      </div>
+    </div>
+
+    <!-- 처리현황 + 솔루션별 숫자 -->
+    <div class="stat-chart-row">
+
+      <!-- 처리 현황 숫자 -->
+      <div class="stat-box">
+        <div class="stat-box-hd">
+          <h3>📊 처리 현황</h3>
+          <p>상태별 민원 건수</p>
+        </div>
+        {% set _t = status_count['접수대기'] + status_count['처리중'] + status_count['완료'] %}
+        {% set _r = ((status_count['완료'] / _t * 100) | int) if _t > 0 else 0 %}
+        <div class="status-rate-wrap">
+          <div class="status-rate-num" style="color:{% if _r >= 70 %}#4CAF50{% elif _r >= 40 %}#FF9800{% else %}#f44336{% endif %}">
+            {{ _r }}%
+          </div>
+          <div class="status-rate-lbl">완료율</div>
+        </div>
+        <div class="status-3col">
+          <div class="status-item s-num-red">
+            <div class="status-num">{{ status_count['접수대기'] }}</div>
+            <div class="status-lbl">접수대기</div>
+          </div>
+          <div class="status-item s-num-orange">
+            <div class="status-num">{{ status_count['처리중'] }}</div>
+            <div class="status-lbl">처리중</div>
+          </div>
+          <div class="status-item s-num-green">
+            <div class="status-num">{{ status_count['완료'] }}</div>
+            <div class="status-lbl">완료</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 솔루션별 랭킹 + 드롭다운 필터 -->
+      <div class="stat-box" style="overflow:visible">
+        <div class="rank-hdr">
+          <div class="rank-hdr-text">
+            <h3>🔧 솔루션별 접수</h3>
+            <p>접수 많은 순 정렬</p>
+          </div>
+          <div class="filter-dd-wrap">
+            <button class="filter-dd-btn" id="wSolBtn" onclick="toggleWardDD()">
+              <span id="wSolLabel">필터</span>
+              <span class="arrow">▾</span>
+            </button>
+            <div class="filter-dd" id="wSolDD">
+              <div class="filter-dd-opt all-opt" onclick="applyWardDD('')">전체 보기</div>
+              {% for sol in solution_count.keys() %}
+              <div class="filter-dd-opt" data-val="{{ sol }}" onclick="applyWardDD('{{ sol }}')">{{ sol }}</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% set sol_max = solution_count.values() | max if solution_count else 1 %}
+        <div class="rank-list">
+          {% for sol, cnt in solution_count.items() %}
+          <div class="rank-item">
+            <span class="rank-no {% if loop.index == 1 %}r1{% elif loop.index == 2 %}r2{% elif loop.index == 3 %}r3{% endif %}">{{ loop.index }}</span>
+            <span class="rank-name" title="{{ sol }}">{{ sol }}</span>
+            <div class="rank-bar-wrap">
+              <div class="rank-bar" style="width:{{ (cnt / sol_max * 100) | int }}%"></div>
+            </div>
+            <span class="rank-val">{{ cnt }}건</span>
+          </div>
+          {% else %}
+          <div style="text-align:center;color:#ccc;padding:16px;font-size:12px">데이터 없음</div>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 월별 추이 (전체폭) -->
+    <div class="monthly-row">
+      <div class="monthly-box">
+        <div class="stat-box-hd" style="margin-bottom:10px">
+          <h3>📅 월별 추이</h3>
+          <p>월별 접수 건수</p>
+        </div>
+        <canvas id="monthlyChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 민원 목록 -->
+    <div class="section-header">
+      <span class="section-title">📋 접수 목록</span>
+      <span class="count-tag" id="cardCount">{{ complaints|length }}건</span>
+    </div>
+
+    {% for c in complaints %}
+    {% set status = c.status if c.status else '접수대기' %}
+    <div class="complaint-card" data-sol="{{ c.solution }}" data-month="{{ c.created_at[0:7] if c.created_at else '' }}">
+      <div class="card-top">
+        <div class="card-left">
+          <span class="card-num">#{{ c.id }}</span>
+          <span class="sol-tag">{{ c.solution }}</span>
+          <span class="issue-text">{{ c.issue }}</span>
+        </div>
+        <span class="status-badge s-{{ status }}">{{ status }}</span>
+      </div>
+      {% if c.description %}
+      <div class="desc-text">{{ c.description }}</div>
+      {% endif %}
+      <div class="timeline">
+        <div class="tl-step {{ 'done' if status in ['처리중','완료'] else 'active' if status == '접수대기' }}">
+          <div class="tl-dot">1</div><div class="tl-label">접수대기</div>
+        </div>
+        <div class="tl-step {{ 'done' if status == '완료' else 'active' if status == '처리중' }}">
+          <div class="tl-dot">2</div><div class="tl-label">처리중</div>
+        </div>
+        <div class="tl-step {{ 'done' if status == '완료' }}">
+          <div class="tl-dot">✓</div><div class="tl-label">완료</div>
+        </div>
+      </div>
+      <div class="card-time">{{ c.created_at }}</div>
+    </div>
+    {% endfor %}
+
+  {% else %}
+    <div class="empty-box">
+      <div class="ei">📭</div>
+      <p>아직 접수된 민원이 없습니다<br>아래 버튼을 눌러 첫 민원을 접수해보세요</p>
+    </div>
+  {% endif %}
+
+</div>
+
+<!-- FAB -->
+<button class="fab" onclick="openModal()">✏️ 민원 접수</button>
+
+<!-- 모달 -->
+<div class="modal-overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+
+    <div id="formState">
+      <div class="modal-header">
+        <span class="modal-title">📋 민원 접수</span>
+        <button class="btn-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-ward">📍 {{ ward }}</div>
+
+      <div class="form-group">
+        <label class="form-label">💡 솔루션</label>
+        <select class="form-control" id="mSol" onchange="updateIssues()">
+          <option value="">선택하세요</option>
+          <option>자산비콘</option><option>환자비콘</option><option>수액</option>
+          <option>스마트저울</option><option>스마트혈압계</option>
+          <option>스마트체온계(비접촉)</option><option>스마트체온계(고막)</option>
+          <option>스마트신장계</option><option>스마트워치</option>
+          <option>병상용모니터</option><option>인포보드</option>
+          <option>스캐너</option><option>냉장고센서</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">⚠️ 문제 유형</label>
+        <select class="form-control" id="mIssue">
+          <option value="">먼저 솔루션을 선택하세요</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">📝 상세 내용 (선택)</label>
+        <textarea class="form-control" id="mDesc" rows="3"
+                  placeholder="추가 설명이 있으면 입력해주세요"></textarea>
+      </div>
+
+      <div class="err-msg" id="errMsg"></div>
+      <button class="btn-submit" id="btnSubmit" onclick="submitForm()">접수하기 →</button>
+    </div>
+
+    <div class="success-state" id="successState">
+      <div class="success-icon">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+      <div class="success-title">접수 완료!</div>
+      <div class="success-sub">담당자가 확인 후 처리할 예정입니다</div>
+      <div class="success-num" id="successNum">#-</div>
+      <button class="btn-more p" onclick="submitAnother()">➕ 추가 접수</button>
+      <button class="btn-more s" onclick="window.location.href='/ward?key='+MY_KEY">📋 현황 확인</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ── 월별 추이 막대 ── */
+  {% if complaints %}
+  const moLabels = {{ monthly_count.keys() | list | tojson }};
+  const moData   = {{ monthly_count.values() | list | tojson }};
+  const wardMonthlyInst = new Chart(document.getElementById('monthlyChart'), {
+    type: 'bar',
+    data: {
+      labels: moLabels,
+      datasets: [{
+        label: '건수',
+        data: moData,
+        backgroundColor: moLabels.map((_, i) =>
+          i === moLabels.length - 1 ? 'rgba(76,175,80,0.9)' : 'rgba(76,175,80,0.35)'
+        ),
+        borderColor: '#4CAF50',
+        borderWidth: 1.5,
+        borderRadius: 6, borderSkipped: false
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y}건` } }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f0f0f0' } },
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+  {% endif %}
+
+  /* ── 솔루션 드롭다운 필터 ── */
+  function toggleWardDD() {
+    const dd  = document.getElementById('wSolDD');
+    const btn = document.getElementById('wSolBtn');
+    const was = dd.classList.contains('open');
+    dd.classList.toggle('open', !was);
+    btn.classList.toggle('open', !was);
+  }
+
+  function applyWardDD(sol) {
+    const dd    = document.getElementById('wSolDD');
+    const btn   = document.getElementById('wSolBtn');
+    const label = document.getElementById('wSolLabel');
+
+    // 옵션 활성 표시
+    dd.querySelectorAll('.filter-dd-opt').forEach(opt => {
+      opt.classList.toggle('active', opt.dataset.val === sol && sol !== '');
+    });
+
+    // 버튼 레이블
+    if (sol) {
+      btn.classList.add('on');
+      label.textContent = sol.length > 6 ? sol.slice(0,6) + '…' : sol;
+    } else {
+      btn.classList.remove('on');
+      label.textContent = '필터';
+    }
+
+    // 드롭다운 닫기
+    dd.classList.remove('open');
+    btn.classList.remove('open');
+
+    // 카드 보이기/숨기기 (월별 차트는 독립 — 항상 전체 데이터)
+    const cards = document.querySelectorAll('.complaint-card[data-sol]');
+    let visible = 0;
+    cards.forEach(card => {
+      const show = !sol || card.dataset.sol === sol;
+      card.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    const countEl = document.getElementById('cardCount');
+    if (countEl) countEl.textContent = visible + '건';
+
+    // 솔루션별 랭킹 카드 내부 하이라이트
+    document.querySelectorAll('#wSolDD').forEach(dd => {
+      const card = dd.closest('.stat-box');
+      card?.querySelectorAll('.rank-item').forEach(row => {
+        const name  = row.querySelector('.rank-name')?.textContent.trim();
+        const match = sol && name === sol;
+        row.style.background   = match ? '#e8f5e9' : '';
+        row.style.borderRadius = match ? '8px'     : '';
+      });
+    });
+    // 월별 차트는 건드리지 않음
+  }
+
+  // 드롭다운 외부 클릭 시 닫기
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.filter-dd-wrap')) {
+      document.getElementById('wSolDD')?.classList.remove('open');
+      document.getElementById('wSolBtn')?.classList.remove('open');
+    }
+  });
+
+  /* ── 1분 자동 싱크 ── */
+  let wSyncSec = 60;
+  const wSyncTick = setInterval(() => {
+    wSyncSec--;
+    const lbl = document.getElementById('wardSyncLabel');
+    if (lbl) {
+      const m = Math.floor(wSyncSec / 60);
+      const s = wSyncSec % 60;
+      lbl.textContent = `${m}:${String(s).padStart(2,'0')}`;
+    }
+    if (wSyncSec <= 0) {
+      clearInterval(wSyncTick);
+      if (lbl) lbl.textContent = '업데이트 중…';
+      setTimeout(() => { location.href = '/ward?key=' + MY_KEY; }, 300);
+    }
+  }, 1000);
+
+  /* ── 현재 탭의 접속 키 (URL에서 읽기) ── */
+  const MY_KEY = new URLSearchParams(window.location.search).get('key') || '{{ key }}';
+
+  /* ── 문제 유형 ── */
+  const issueMap = {
+    "자산비콘":["이름/번호 불일치","신호상실","신규신청","자산불용/폐기","분실","기타"],
+    "환자비콘":["고장(파손)","분실","신호상실","기타"],
+    "수액":["부속품 분실/파손","수액 연동안됨","수액센서이상","수액기기 고장(파손)","수액기기 분실","기타"],
+    "스마트저울":["바코드스캐너 접촉불량","바코드보드 인식오류","TPR 연동안됨","저울 무게 이상","기타"],
+    "스마트혈압계":["PDA 연동안됨","바코드 훼손","기타"],
+    "스마트체온계(비접촉)":["PDA 연동안됨","바코드 훼손","기타"],
+    "스마트체온계(고막)":["PDA 연동안됨","바코드 훼손","기타"],
+    "스마트신장계":["팔찌바코드 이상"],
+    "스마트워치":["앱 접속 오류","워치 고장(파손)","기타"],
+    "병상용모니터":["네트워크 오류","기타"],
+    "인포보드":["네트워크 오류","기타"],
+    "스캐너":["네트워크 오류","기타"],
+    "냉장고센서":["전원꺼짐","센서범위 이상","기기 고장/파손","신호상실","기타"]
+  };
+  function updateIssues() {
+    const sol = document.getElementById('mSol').value;
+    const sel = document.getElementById('mIssue');
+    sel.innerHTML = '';
+    (issueMap[sol] || []).forEach(item => {
+      const o = document.createElement('option');
+      o.value = o.text = item;
+      sel.appendChild(o);
+    });
+    if (!issueMap[sol])
+      sel.innerHTML = '<option value="">먼저 솔루션을 선택하세요</option>';
+  }
+
+  /* ── 모달 ── */
+  function openModal() {
+    document.getElementById('formState').style.display = 'block';
+    document.getElementById('successState').style.display = 'none';
+    document.getElementById('overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    document.getElementById('overlay').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+
+  /* ── 접수 제출 ── */
+  function submitForm() {
+    const solution = document.getElementById('mSol').value;
+    const issue    = document.getElementById('mIssue').value;
+    const desc     = document.getElementById('mDesc').value;
+    const errEl    = document.getElementById('errMsg');
+
+    if (!solution || !issue) {
+      errEl.textContent = '솔루션과 문제 유형을 선택해주세요';
+      errEl.style.display = 'block';
+      return;
+    }
+    errEl.style.display = 'none';
+
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = true; btn.textContent = '접수 중...';
+
+    fetch('/api/submit?key=' + MY_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ solution, issue, description: desc })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        document.getElementById('successNum').textContent = '#' + data.id;
+        document.getElementById('formState').style.display = 'none';
+        document.getElementById('successState').style.display = 'block';
+      } else {
+        errEl.textContent = data.error || '오류가 발생했습니다';
+        errEl.style.display = 'block';
+      }
+    })
+    .catch(() => { errEl.textContent = '네트워크 오류. 다시 시도해주세요.'; errEl.style.display = 'block'; })
+    .finally(() => { btn.disabled = false; btn.textContent = '접수하기 →'; });
+  }
+
+  function submitAnother() {
+    document.getElementById('mSol').value = '';
+    document.getElementById('mIssue').innerHTML = '<option value="">먼저 솔루션을 선택하세요</option>';
+    document.getElementById('mDesc').value = '';
+    document.getElementById('formState').style.display = 'block';
+    document.getElementById('successState').style.display = 'none';
+  }
+</script>
+</body>
+</html>
