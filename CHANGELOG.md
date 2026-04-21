@@ -1,7 +1,7 @@
 # CHANGELOG — Crate Dashboard
 
 > 병동 민원 접수 및 관리 대시보드  
-> Repository: https://github.com/ajsiwkvue-sudo/crate_dashboard
+> Repository: https://github.com/ajsiwkvue-sudo/smart-solution-dashboard
 
 ---
 
@@ -471,3 +471,104 @@ crate_dashboard/
 ---
 
 *Last updated: 2026-04-14*
+
+---
+
+---
+
+### v1.1 — PostgreSQL 전환 + Flask-Login 세션 인증 (아키텍처 재설계)
+
+**배경:**
+> 온프레미스 병원 서버 배포를 위한 프로덕션 준비. URL Key 방식의 보안 취약점 제거 필요.
+
+**변경 내용:**
+
+- **DB**: SQLite3 → PostgreSQL (psycopg2-binary)
+  - 플레이스홀더 `?` → `%s`
+  - `db.sqlite3` 파일 의존성 제거
+  - `DATABASE_URL` 환경변수로 연결 설정
+- **인증**: URL access_key 완전 제거 → Flask-Login 세션 쿠키
+  - `access_key` 컬럼 제거
+  - `login_user()` / `logout_user()` / `@login_required`
+  - 세션 7일 유지 (`SESSION_PERMANENT`, `PERMANENT_SESSION_LIFETIME`, `session.permanent = True`, `login_user(remember=True)`)
+- **보안**: 하드코딩 계정 정보 제거, `.env` 기반 `ADMIN_PASSWORD` / `SECRET_KEY`
+- **배포 파일 추가**: `wsgi.py`, `deploy/nginx.conf`, `deploy/smartsolution.service`
+- **레거시 파일 삭제**: `templates/index.html`, `submitted.html`, `track.html`
+
+**버그 수정:**
+
+| 이슈 | 원인 | 해결 |
+|------|------|------|
+| `load_user` DB 오류 시 세션 초기화 | 예외 처리 없어 Flask-Login이 anonymous 반환 | `try/except` 추가, 오류 시 `None` 반환 |
+| API 경로에서 HTML redirect 반환 | `require_role`이 모든 경로에서 302 반환 | `/api/`, `/action`, `/admin/accounts/` 경로는 JSON 401/403 반환 |
+| 계정 전환 시 이전 세션 잔류 | `login_user()` 전 `logout_user()` 미호출 | 로그인 전 `logout_user()` 명시 호출 |
+| 알람 폴링 속도 | 10초 간격으로 알람 지연 | 3초로 단축 |
+
+---
+
+### v1.2 — 동일 브라우저 admin + nurse 동시 세션 지원
+
+**문제 (사용자):**
+> "아니 같은 크롬에서 테스트될 수 있도록 해야지"
+
+**원인 분석:**
+- Flask-Login은 브라우저당 세션 쿠키 하나
+- 간호사로 로그인하면 `logout_user()` → `login_user()` 순서로 관리자 세션이 파괴됨
+- 같은 브라우저에서 admin 탭 + ward 탭 동시 유지 불가
+
+**해결 (아키텍처 결정):**
+- 관리자: 기존 Flask-Login 세션 쿠키 유지
+- 간호사: `itsdangerous.URLSafeTimedSerializer`로 서명된 **별도 `ward_session` 쿠키** 사용
+- 로그인 시 role에 따라 분기:
+  - `admin` → `login_user()` (Flask-Login)
+  - `nurse` → `response.set_cookie('ward_session', signed_token)` (Flask-Login 건드리지 않음)
+
+```python
+# 간호사 로그인 처리
+resp = make_response(redirect(url_for('ward_view', ward_name=username)))
+resp.set_cookie('ward_session', token, max_age=86400*7, httponly=True, samesite='Lax')
+return resp
+```
+
+- `/ward/logout` → `resp.delete_cookie('ward_session')` (관리자 세션 영향 없음)
+- `require_ward` 데코레이터 추가: `ward_session` 쿠키 검증
+
+**결과:** admin 탭 + ward 탭이 같은 Chrome에서 독립적으로 공존
+
+---
+
+### v1.3 — 병동별 독립 쿠키로 다중 병동 동시 로그인
+
+**문제 (사용자):**
+> "다른 병동 로그인도 여러 개를 창 띄우려고 하는데 간호사 세션이 하나니까 하나밖에 로그인이 안되네"
+
+**원인:** `ward_session` 쿠키가 하나이므로 병동 B 로그인 시 병동 A 쿠키를 덮어씀
+
+**해결:**
+- 쿠키명을 `ward_session_{병동명}`으로 변경 → 병동마다 독립 쿠키
+- 라우트를 `/ward` → `/ward/<ward_name>`으로 변경 (URL로 어느 병동 탭인지 구분)
+- `/ward/<ward_name>/logout` → 해당 병동 쿠키만 삭제, 나머지 세션 무영향
+- `/api/submit` 폼에 `ward` 필드 추가 → 서버에서 어느 병동 쿠키를 검증할지 결정
+
+```
+브라우저 쿠키 상태 (동시 로그인 예시):
+  session          → admin Flask-Login
+  ward_session_A병동 → A병동 서명 토큰
+  ward_session_B병동 → B병동 서명 토큰
+  ward_session_C병동 → C병동 서명 토큰
+```
+
+**현재 Roadmap 업데이트:**
+
+| 항목 | 파일럿 v1.0 | 현재 v1.3 | 중장기 목표 |
+|------|------------|-----------|-------------|
+| **DB** | SQLite | PostgreSQL ✅ | PostgreSQL 유지 |
+| **인증** | URL access_key | Flask-Login + ward cookie ✅ | 병원 SSO / LDAP |
+| **멀티탭** | ✅ (URL key) | ✅ (독립 쿠키) | 유지 |
+| **통신** | HTTP | HTTP | HTTPS (원내 인증서) |
+| **배포** | python app.py | Gunicorn + nginx ✅ | Docker / WAS |
+| **감사 로그** | ❌ | ❌ | 전체 행동 로깅 |
+
+---
+
+*Last updated: 2026-04-21*
