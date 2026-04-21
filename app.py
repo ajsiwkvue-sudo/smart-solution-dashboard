@@ -270,6 +270,24 @@ def ward_view(ward_name):
                            monthly_count=monthly_count,
                            status_count=status_count)
 
+@app.route('/api/ward_poll/<ward_name>')
+@require_ward
+def ward_poll(ward_name):
+    """병동 페이지 전용 폴링 — 해당 병동 민원 상태 목록 반환 (3초 간격)"""
+    ward = _get_ward_user(ward_name)['username']
+    conn = get_db()
+    try:
+        with conn.cursor() as c:
+            c.execute(
+                "SELECT id, status FROM complaints WHERE ward=%s",
+                (ward,)
+            )
+            statuses = {str(r['id']): (r['status'] or '접수대기')
+                        for r in c.fetchall()}
+    finally:
+        conn.close()
+    return jsonify({'statuses': statuses})
+
 @app.route('/api/submit', methods=['POST'])
 @require_ward
 def api_submit():
