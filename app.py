@@ -12,6 +12,8 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7일
 
 # ──────────────────────────────────────────────
 # Flask-Login 설정
@@ -30,14 +32,17 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    conn = get_db()
     try:
-        with conn.cursor() as c:
-            c.execute("SELECT id, username, role FROM users WHERE id = %s", (user_id,))
-            row = c.fetchone()
-        return User(row['id'], row['username'], row['role']) if row else None
-    finally:
-        conn.close()
+        conn = get_db()
+        try:
+            with conn.cursor() as c:
+                c.execute("SELECT id, username, role FROM users WHERE id = %s", (user_id,))
+                row = c.fetchone()
+            return User(row['id'], row['username'], row['role']) if row else None
+        finally:
+            conn.close()
+    except Exception:
+        return None
 
 # ──────────────────────────────────────────────
 # DB (PostgreSQL)
@@ -97,9 +102,14 @@ def require_role(role):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
+            is_api = request.path.startswith('/api/') or request.path == '/action'
             if not current_user.is_authenticated:
+                if is_api:
+                    return jsonify({'success': False, 'error': '로그인이 필요합니다. 페이지를 새로고침해주세요.'}), 401
                 return redirect(url_for('login'))
             if current_user.role != role:
+                if is_api:
+                    return jsonify({'success': False, 'error': f'{role} 권한이 필요합니다. 올바른 계정으로 로그인해주세요.'}), 403
                 return redirect(url_for('login'))
             return f(*args, **kwargs)
         return decorated

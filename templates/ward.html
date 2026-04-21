@@ -765,7 +765,7 @@
         errEl.style.display = 'block';
       }
     })
-    .catch(() => { errEl.textContent = '네트워크 오류. 다시 시도해주세요.'; errEl.style.display = 'block'; })
+    .catch(() => { errEl.textContent = '오류가 발생했습니다. 로그인 상태를 확인하고 페이지를 새로고침해주세요.'; errEl.style.display = 'block'; })
     .finally(() => { btn.disabled = false; btn.textContent = '접수하기 →'; });
   }
 
