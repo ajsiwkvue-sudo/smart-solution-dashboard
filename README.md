@@ -37,27 +37,96 @@
 
 ## 설치 & 실행
 
-### 요구사항
+### Windows PC에서 테스트 실행
+
+병동/관리자 PC에서 직접 설치해서 테스트할 때 사용합니다.
+
+#### 1. 필수 프로그램 설치
+
+| 프로그램 | 다운로드 |
+|----------|----------|
+| Python 3.8+ | https://python.org → Downloads → Windows |
+| Git | https://git-scm.com → Downloads → Windows |
+| PostgreSQL 15 | https://postgresql.org → Downloads → Windows |
+
+> Python 설치 시 **"Add Python to PATH"** 반드시 체크
+
+#### 2. 저장소 클론
+
+CMD(명령 프롬프트)를 열고:
+
+```cmd
+git clone https://github.com/ajsiwkvue-sudo/smart-solution-dashboard.git
+cd smart-solution-dashboard
+```
+
+#### 3. 의존성 설치
+
+```cmd
+pip install -r requirements.txt
+```
+
+#### 4. PostgreSQL 데이터베이스 생성
+
+PostgreSQL 설치 시 설정한 postgres 비밀번호로 접속:
+
+```cmd
+psql -U postgres
+```
+
+```sql
+CREATE DATABASE smartsolution OWNER postgres;
+\q
+```
+
+#### 5. .env 파일 생성
+
+프로젝트 폴더 안에 `.env` 파일을 메모장으로 생성:
+
+```env
+SECRET_KEY=랜덤문자열아무거나32자이상
+DATABASE_URL=postgresql://postgres:postgres비밀번호@localhost:5432/smartsolution
+ADMIN_PASSWORD=관리자비밀번호
+```
+
+`SECRET_KEY` 생성하려면 CMD에서:
+```cmd
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+#### 6. 실행
+
+```cmd
+python app.py
+```
+
+브라우저에서 http://127.0.0.1:5001 접속
+
+---
+
+### Mac / Linux에서 개발 실행
+
+#### 요구사항
 
 ```
 Python 3.8+
 PostgreSQL 14+
 ```
 
-### 1. 저장소 클론
+#### 1. 저장소 클론
 
 ```bash
 git clone https://github.com/ajsiwkvue-sudo/smart-solution-dashboard.git
 cd smart-solution-dashboard
 ```
 
-### 2. 의존성 설치
+#### 2. 의존성 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. PostgreSQL 데이터베이스 생성
+#### 3. PostgreSQL 데이터베이스 생성
 
 ```bash
 psql postgres
@@ -69,7 +138,7 @@ CREATE DATABASE smartsolution OWNER smartuser;
 \q
 ```
 
-### 4. 환경변수 설정
+#### 4. 환경변수 설정
 
 `.env` 파일 생성:
 
@@ -84,7 +153,7 @@ ADMIN_PASSWORD=관리자비밀번호
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### 5. 실행
+#### 5. 실행
 
 개발:
 ```bash
