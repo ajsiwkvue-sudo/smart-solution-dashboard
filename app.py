@@ -130,6 +130,7 @@ def init_db():
                     description  TEXT,
                     status       TEXT DEFAULT '접수대기',
                     submitted_by TEXT,
+                    message      TEXT,
                     created_at   TEXT
                 )
             ''')
@@ -146,6 +147,7 @@ def init_db():
             # 기존 DB 컬럼 추가 (이미 있으면 무시)
             c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS ward TEXT")
             c.execute("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS submitted_by TEXT")
+            c.execute("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS message TEXT")
             # 기존 nurse 계정 마이그레이션: ward = username (병동명이 곧 ID였던 구조)
             c.execute("""
                 UPDATE users SET ward = username
@@ -254,12 +256,12 @@ def ward_logout(ward_name):
 @app.route('/ward/<ward_name>')
 @require_ward
 def ward_view(ward_name):
-    ward = _get_ward_user(ward_name)['username']
+    ward = _get_ward_user(ward_name)['ward']   # ← ['ward'] 사용 (사번 ≠ 병동명)
     conn = get_db()
     try:
         with conn.cursor() as c:
             c.execute('''
-                SELECT id, ward, solution, issue, description, status, created_at
+                SELECT id, ward, solution, issue, description, status, message, created_at
                 FROM complaints WHERE ward=%s ORDER BY id DESC
             ''', (ward,))
             complaints = [dict(r) for r in c.fetchall()]
@@ -290,20 +292,22 @@ def ward_view(ward_name):
 @app.route('/api/ward_poll/<ward_name>')
 @require_ward
 def ward_poll(ward_name):
-    """병동 페이지 전용 폴링 — 해당 병동 민원 상태 목록 반환 (3초 간격)"""
-    ward = _get_ward_user(ward_name)['username']
+    """병동 페이지 전용 폴링 — 상태 + 담당자 메시지 반환 (3초 간격)"""
+    ward = _get_ward_user(ward_name)['ward']   # ← ['ward'] 사용
     conn = get_db()
     try:
         with conn.cursor() as c:
             c.execute(
-                "SELECT id, status FROM complaints WHERE ward=%s",
+                "SELECT id, status, message FROM complaints WHERE ward=%s",
                 (ward,)
             )
-            statuses = {str(r['id']): (r['status'] or '접수대기')
-                        for r in c.fetchall()}
+            rows = c.fetchall()
+            statuses = {str(r['id']): (r['status'] or '접수대기') for r in rows}
+            messages = {str(r['id']): r['message']
+                        for r in rows if r['message']}
     finally:
         conn.close()
-    return jsonify({'statuses': statuses})
+    return jsonify({'statuses': statuses, 'messages': messages})
 
 @app.route('/api/submit', methods=['POST'])
 @require_ward
@@ -394,6 +398,7 @@ def admin():
 def action():
     complaint_id = request.form.get('id')
     act          = request.form.get('action')
+    message      = request.form.get('message', '').strip()  # 관리자 → 병동 메시지 (선택)
     status_map   = {'accept': '처리중', 'complete': '완료'}
     new_status   = status_map.get(act)
     if not new_status:
@@ -402,11 +407,17 @@ def action():
     conn = get_db()
     try:
         with conn.cursor() as c:
-            c.execute("UPDATE complaints SET status=%s WHERE id=%s", (new_status, complaint_id))
+            if message:
+                c.execute("UPDATE complaints SET status=%s, message=%s WHERE id=%s",
+                          (new_status, message, complaint_id))
+            else:
+                c.execute("UPDATE complaints SET status=%s WHERE id=%s",
+                          (new_status, complaint_id))
         conn.commit()
     finally:
         conn.close()
-    return jsonify({'success': True, 'id': complaint_id, 'status': new_status})
+    return jsonify({'success': True, 'id': complaint_id,
+                    'status': new_status, 'message': message})
 
 @app.route('/api/poll')
 @require_role('admin')
@@ -426,8 +437,9 @@ def poll():
             c.execute("SELECT status, COUNT(*) as cnt FROM complaints GROUP BY status")
             status_counts = {'접수대기': 0, '처리중': 0, '완료': 0}
             for row in c.fetchall():
-                if row['status'] in status_counts:
-                    status_counts[row['status']] = row['cnt']
+                st = row['status'] or '접수대기'  # NULL → 접수대기로 취급
+                if st in status_counts:
+                    status_counts[st] += row['cnt']
 
             c.execute("SELECT COUNT(*) as cnt FROM complaints")
             total = c.fetchone()['cnt']

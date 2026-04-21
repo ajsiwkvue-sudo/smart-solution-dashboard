@@ -1,4 +1,4 @@
-# CHANGELOG — Crate Dashboard
+# CHANGELOG — Smart Solution Dashboard
 
 > 병동 민원 접수 및 관리 대시보드  
 > Repository: https://github.com/ajsiwkvue-sudo/smart-solution-dashboard
@@ -570,5 +570,31 @@ return resp
 | **감사 로그** | ❌ | ❌ | 전체 행동 로깅 |
 
 ---
+
+---
+
+### v1.4 — 관리자→병동 메시지 기능 + 전체 코드 감사 수정
+
+**새 기능: 담당자 메시지**
+
+> 관리자가 접수/완료 처리 시 병동에 메시지를 남길 수 있음
+
+- `/action` POST: 선택적 `message` 필드 추가, `complaints.message` 컬럼에 저장
+- 관리자 UI: "접수하기" / "완료" 클릭 시 메시지 모달 팝업 (Ctrl+Enter 단축키 지원)
+- `/api/ward_poll/<ward_name>`: 상태와 함께 메시지도 반환 (`messages` 필드)
+- 병동 페이지: 각 민원 카드에 담당자 메시지 영역 추가 (3초 폴링으로 실시간 표시)
+
+**버그 수정 (코드 감사)**
+
+| 파일 | 이슈 | 수정 |
+|------|------|------|
+| `app.py` | `ward_view` / `ward_poll`에서 `['username']` 사용 — 사번 ≠ 병동명 혼동 | `['ward']`로 변경 |
+| `app.py` | `/api/poll` NULL status 처리 누락 | `st = row['status'] or '접수대기'` |
+| `app.py` | `complaints` 테이블 `message` 컬럼 누락 | `ADD COLUMN IF NOT EXISTS message TEXT` 마이그레이션 추가 |
+| `admin.html` | `allNewComplaints` 배열 메모리 누수 | 최대 50건으로 캡 |
+| `admin.html` | `insertAdjacentHTML`에 사용자 입력 직접 삽입 (HTML injection) | `esc()` 이스케이프 함수 적용 |
+| `admin.html` | `updateKpiLive()` 이번달 KPI 미업데이트 | month 카드 업데이트 로직 추가 |
+| `login.html` | 라벨 "아이디 (병동명)" — EMR 사번 로그인 반영 안됨 | "아이디 (사번 또는 병동명)"으로 변경 |
+| `CHANGELOG.md` | 제목 "Crate Dashboard" | "Smart Solution Dashboard"로 수정 |
 
 *Last updated: 2026-04-21*

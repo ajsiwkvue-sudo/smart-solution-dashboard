@@ -484,8 +484,44 @@
     .s-처리중   { background: #fff8e1; color: #e65100; }
     .s-완료     { background: #e8f5e9; color: #2e7d32; }
 
-    /* ── 토스트 ── */
-    #toast {
+    /* ── 메시지 모달 ── */
+  .msg-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 400;
+    display: none;
+    align-items: center; justify-content: center;
+  }
+  .msg-modal-overlay.open { display: flex; }
+  .msg-modal {
+    background: white; border-radius: 18px; padding: 28px 24px;
+    width: 380px; max-width: calc(100vw - 32px);
+    box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  }
+  .msg-modal h3 { font-size: 15px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; }
+  .msg-modal p  { font-size: 12px; color: #aaa; margin-bottom: 14px; }
+  .msg-modal textarea {
+    width: 100%; padding: 10px 12px;
+    border: 1.5px solid #e0e0e0; border-radius: 10px;
+    font-size: 13px; font-family: inherit;
+    resize: none; min-height: 80px; outline: none;
+    transition: border-color .2s; box-sizing: border-box;
+  }
+  .msg-modal textarea:focus { border-color: #4CAF50; }
+  .msg-modal-btns { display: flex; gap: 8px; margin-top: 12px; }
+  .msg-modal-btns .btn-confirm {
+    flex: 1; padding: 10px; border: none; border-radius: 10px;
+    font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+    color: white; background: linear-gradient(135deg,#4CAF50,#43A047);
+  }
+  .msg-modal-btns .btn-cancel {
+    padding: 10px 16px; border: none; border-radius: 10px;
+    font-size: 13px; cursor: pointer; font-family: inherit;
+    background: #f5f5f5; color: #888;
+  }
+
+  /* ── 토스트 ── */
+  #toast {
       position: fixed;
       bottom: 28px;
       right: 28px;
@@ -867,6 +903,19 @@
 </div>
 </div><!-- /panel-accounts -->
 
+<!-- 관리자 → 병동 메시지 모달 -->
+<div class="msg-modal-overlay" id="msgModalOverlay" onclick="if(event.target===this)closeMsgModal()">
+  <div class="msg-modal">
+    <h3 id="msgModalTitle">상태 변경</h3>
+    <p>메시지를 남기면 해당 병동 페이지에 표시됩니다 (선택사항)</p>
+    <textarea id="msgInput" placeholder="예: 부품 도착 완료, 오후 2시 방문 예정입니다"></textarea>
+    <div class="msg-modal-btns">
+      <button class="btn-confirm" id="msgConfirmBtn" onclick="sendActionWithMsg()">처리</button>
+      <button class="btn-cancel" onclick="closeMsgModal()">취소</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -903,12 +952,39 @@
     }
   });
 
-  /* ── 액션 (접수하기 / 완료) ── */
+  /* ── 액션 (접수하기 / 완료) — 메시지 모달 경유 ── */
+  let _pendingId  = null;
+  let _pendingAct = null;
+
   function doAction(id, act) {
+    _pendingId  = id;
+    _pendingAct = act;
+    const isAccept = act === 'accept';
+    document.getElementById('msgModalTitle').textContent =
+      `#${id} — ${isAccept ? '접수 처리' : '완료 처리'}`;
+    document.getElementById('msgConfirmBtn').textContent =
+      isAccept ? '접수하기 →' : '완료 ✓';
+    document.getElementById('msgInput').value = '';
+    document.getElementById('msgModalOverlay').classList.add('open');
+    setTimeout(() => document.getElementById('msgInput').focus(), 80);
+  }
+
+  function closeMsgModal() {
+    document.getElementById('msgModalOverlay').classList.remove('open');
+    _pendingId  = null;
+    _pendingAct = null;
+  }
+
+  function sendActionWithMsg() {
+    const id  = _pendingId;
+    const act = _pendingAct;
+    const msg = document.getElementById('msgInput').value.trim();
+    closeMsgModal();
+
     fetch('/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `id=${id}&action=${act}`
+      body: new URLSearchParams({ id, action: act, message: msg })
     })
     .then(r => r.json())
     .then(data => {
@@ -918,20 +994,27 @@
       const row = document.getElementById('row-' + id);
       row.dataset.status = newStatus;
 
-      // 액션 영역 재렌더링
       const area = document.getElementById('action-' + id);
       if (newStatus === '처리중') {
         area.innerHTML =
           '<span class="status-chip s-처리중">처리중</span>' +
           `<button class="btn-complete" onclick="doAction(${id},'complete')">완료 ✓</button>`;
-        showToast(`#${id} → 처리중으로 접수되었습니다`);
+        showToast(`#${id} → 처리중${msg ? ' 💬 메시지 전송' : ''}`);
       } else if (newStatus === '완료') {
         area.innerHTML = '<span class="status-chip s-완료">✓ 완료</span>';
-        showToast(`#${id} → 완료 처리되었습니다`);
+        showToast(`#${id} → 완료${msg ? ' 💬 메시지 전송' : ''}`);
       }
     })
     .catch(() => showToast('⚠️ 네트워크 오류'));
   }
+
+  // 모달 키보드 단축키 (Ctrl+Enter = 전송, Esc = 닫기)
+  document.addEventListener('keydown', e => {
+    if (document.getElementById('msgModalOverlay').classList.contains('open')) {
+      if (e.key === 'Escape') closeMsgModal();
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') sendActionWithMsg();
+    }
+  });
 
   /* ── 필터 ── */
   function applyFilter() {
@@ -1090,10 +1173,12 @@
     const text   = document.getElementById('alertText');
     const badge  = document.getElementById('bellBadge');
 
-    // 새 민원 배열에 추가 (중복 방지)
+    // 새 민원 배열에 추가 (중복 방지, 최대 50건 유지)
     newItems.forEach(c => {
       if (!allNewComplaints.find(x => x.id === c.id)) allNewComplaints.unshift(c);
     });
+    if (allNewComplaints.length > 50) allNewComplaints.length = 50;
+    window._lastNewComplaints = newItems;
     renderBellPanel();
 
     const wardNames = [...new Set(newItems.map(c => c.ward))].slice(0, 3).join(', ');
@@ -1149,6 +1234,15 @@
       const el = document.querySelector(`.kpi-card.${cls} .kpi-val`);
       if (el) el.textContent = val;
     });
+    // 이번달 KPI: 새 민원 중 이번달 것만 카운트해서 누적
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const monthEl = document.querySelector('.kpi-card.month .kpi-val');
+    if (monthEl) {
+      const existing = parseInt(monthEl.textContent) || 0;
+      const newThisMonth = (window._lastNewComplaints || [])
+        .filter(c => (c.created_at || '').startsWith(currentMonth)).length;
+      if (newThisMonth > 0) monthEl.textContent = existing + newThisMonth;
+    }
   }
 
   // 페이지 로드 후 폴링 시작
@@ -1198,14 +1292,16 @@
         const emptyRow = tbody.querySelector('.empty-acc');
         if (emptyRow) emptyRow.closest('tr').remove();
         const now = new Date().toISOString().slice(0,19).replace('T',' ');
+        // HTML injection 방지: textContent로 삽입
+        const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
         tbody.insertAdjacentHTML('afterbegin', `
           <tr id="acc-row-${data.id}">
-            <td class="ward-name">${data.username}</td>
-            <td><span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">${displayWard}</span></td>
-            <td class="created-at">${now}</td>
+            <td class="ward-name">${esc(data.username)}</td>
+            <td><span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">${esc(displayWard)}</span></td>
+            <td class="created-at">${esc(now)}</td>
             <td>
               <button class="btn-reset" onclick="toggleReset(${data.id})">🔑 비번 변경</button>
-              <button class="btn-del"   onclick="deleteAccount(${data.id},'${data.username}')">삭제</button>
+              <button class="btn-del"   onclick="deleteAccount(${data.id},'${esc(data.username)}')">삭제</button>
               <div class="reset-row" id="reset-${data.id}">
                 <input type="password" id="rpw-${data.id}" placeholder="새 비밀번호">
                 <button class="btn-confirm-reset" onclick="confirmReset(${data.id})">변경</button>

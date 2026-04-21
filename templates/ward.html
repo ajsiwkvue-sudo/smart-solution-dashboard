@@ -226,6 +226,18 @@
     .tl-step.active .tl-label { color: #FF9800; }
     .card-time { font-size: 11px; color: #ccc; margin-top: 6px; }
 
+    /* ── 담당자 메시지 ── */
+    .admin-msg-wrap {
+      display: flex; align-items: flex-start; gap: 8px;
+      background: #e8f5e9; border-left: 3px solid #4CAF50;
+      border-radius: 0 8px 8px 0;
+      padding: 8px 12px; margin-bottom: 8px;
+    }
+    .admin-msg-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+    .admin-msg-body { flex: 1; }
+    .admin-msg-label { font-size: 10px; font-weight: 700; color: #2e7d32; margin-bottom: 2px; }
+    .admin-msg-text  { font-size: 12px; color: #333; line-height: 1.5; }
+
     /* ── 빈 상태 ── */
     .empty-box {
       background: white; border-radius: 16px; padding: 60px 20px;
@@ -492,6 +504,13 @@
       {% if c.description %}
       <div class="desc-text">{{ c.description }}</div>
       {% endif %}
+      <div class="admin-msg-wrap" id="msg-{{ c.id }}"{% if not c.message %} style="display:none"{% endif %}>
+        <span class="admin-msg-icon">💬</span>
+        <div class="admin-msg-body">
+          <div class="admin-msg-label">담당자 메시지</div>
+          <div class="admin-msg-text">{{ c.message or '' }}</div>
+        </div>
+      </div>
       <div class="timeline">
         <div class="tl-step {{ 'done' if status in ['처리중','완료'] else 'active' if status == '접수대기' }}">
           <div class="tl-dot">1</div><div class="tl-label">접수대기</div>
@@ -827,6 +846,16 @@
     }
   }
 
+  /* ── 담당자 메시지 표시 ── */
+  function _applyMessage(id, msg) {
+    if (!msg) return;
+    const wrap = document.getElementById('msg-' + id);
+    if (!wrap) return;
+    const textEl = wrap.querySelector('.admin-msg-text');
+    if (textEl) textEl.textContent = msg;
+    wrap.style.display = '';
+  }
+
   setInterval(() => {
     fetch('/api/ward_poll/{{ ward }}')
       .then(r => {
@@ -837,6 +866,9 @@
         if (!data || !data.statuses) return;
         Object.entries(data.statuses).forEach(([id, status]) => {
           _applyStatus(id, status);
+        });
+        Object.entries(data.messages || {}).forEach(([id, msg]) => {
+          _applyMessage(id, msg);
         });
       })
       .catch(() => {});
