@@ -115,9 +115,7 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('admin') if current_user.role == 'admin' else url_for('ward_view'))
-
+    # 이미 로그인 중이어도 항상 로그인 폼 표시 (계정 전환 가능)
     error = None
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -132,6 +130,7 @@ def login():
             conn.close()
 
         if user and check_password_hash(user['password_hash'], password):
+            logout_user()  # 기존 세션 먼저 종료 (계정 전환 지원)
             user_obj = User(user['id'], user['username'], user['role'])
             login_user(user_obj, remember=False)
             return redirect(url_for('admin') if user['role'] == 'admin' else url_for('ward_view'))

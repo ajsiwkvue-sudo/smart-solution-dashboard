@@ -1156,7 +1156,7 @@
     document.getElementById(tab === 'complaints' ? 'tab1' : 'tab2').classList.add('active');
   }
 
-  /* ── 계정 추가 ── */
+    /* ── 계정 추가 ── */
   function addAccount() {
     const username = document.getElementById('newUsername').value.trim();
     const password = document.getElementById('newPassword').value.trim();
@@ -1184,7 +1184,6 @@
         document.getElementById('newPassword').value = '';
         document.getElementById('accCount').textContent =
           (parseInt(document.getElementById('accCount').textContent) + 1) + '개';
-        // 테이블에 행 추가
         const tbody = document.getElementById('accTableBody');
         const emptyRow = tbody.querySelector('.empty-acc');
         if (emptyRow) emptyRow.closest('tr').remove();
@@ -1192,7 +1191,7 @@
         tbody.insertAdjacentHTML('afterbegin', `
           <tr id="acc-row-${data.id}">
             <td class="ward-name">${data.username}</td>
-<td class="created-at">${now}</td>
+            <td class="created-at">${now}</td>
             <td>
               <button class="btn-reset" onclick="toggleReset(${data.id})">🔑 비번 변경</button>
               <button class="btn-del"   onclick="deleteAccount(${data.id},'${data.username}')">삭제</button>
@@ -1207,8 +1206,11 @@
         errEl.textContent = data.error || '오류가 발생했습니다';
         errEl.style.display = 'block';
       }
-    });
+    })
+    .catch(() => { errEl.textContent = '네트워크 오류'; errEl.style.display = 'block'; });
   }
+
+  
 
   /* ── 계정 삭제 ── */
   function deleteAccount(id, name) {
