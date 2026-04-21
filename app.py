@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from datetime import datetime
 from functools import wraps
 import psycopg2
@@ -23,6 +24,51 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = '로그인이 필요합니다.'
+
+# ──────────────────────────────────────────────
+# 병동(nurse) 전용 쿠키 인증 (ward_session)
+# 관리자 Flask-Login 세션과 완전히 분리되어
+# 같은 브라우저에서 동시에 admin + nurse 사용 가능
+# ──────────────────────────────────────────────
+
+_ward_serializer = URLSafeTimedSerializer(
+    app.secret_key, salt='ward-session-salt'
+)
+
+def _set_ward_cookie(response, username, user_id):
+    token = _ward_serializer.dumps({'u': username, 'i': user_id})
+    response.set_cookie(
+        'ward_session', token,
+        max_age=86400 * 7,
+        httponly=True,
+        samesite='Lax'
+    )
+    return response
+
+def _get_ward_user():
+    """ward_session 쿠키에서 병동 사용자 정보를 반환. 없거나 만료면 None."""
+    token = request.cookies.get('ward_session')
+    if not token:
+        return None
+    try:
+        data = _ward_serializer.loads(token, max_age=86400 * 7)
+        return {'username': data['u'], 'id': data['i']}
+    except (BadSignature, SignatureExpired):
+        return None
+
+def require_ward(f):
+    """병동 전용 라우트 보호 데코레이터 (ward_session 쿠키 검사)"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        ward_user = _get_ward_user()
+        is_api = request.path.startswith('/api/')
+        if not ward_user:
+            if is_api:
+                return jsonify({'success': False,
+                                'error': '로그인이 필요합니다. 페이지를 새로고침해주세요.'}), 401
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
 
 class User(UserMixin):
     def __init__(self, id, username, role):
@@ -142,11 +188,18 @@ def login():
             conn.close()
 
         if user and check_password_hash(user['password_hash'], password):
-            logout_user()  # 기존 세션 먼저 종료 (계정 전환 지원)
-            user_obj = User(user['id'], user['username'], user['role'])
-            login_user(user_obj, remember=True)   # 브라우저 닫아도 세션 유지
-            session.permanent = True              # 7일 유지
-            return redirect(url_for('admin') if user['role'] == 'admin' else url_for('ward_view'))
+            if user['role'] == 'admin':
+                # 관리자: Flask-Login 세션 사용 (기존 방식 유지)
+                logout_user()
+                user_obj = User(user['id'], user['username'], user['role'])
+                login_user(user_obj, remember=True)
+                session.permanent = True
+                return redirect(url_for('admin'))
+            else:
+                # 간호사: ward_session 쿠키 사용 (Flask-Login 세션에 영향 없음)
+                resp = make_response(redirect(url_for('ward_view')))
+                _set_ward_cookie(resp, user['username'], user['id'])
+                return resp
         else:
             error = '아이디 또는 비밀번호가 올바르지 않습니다'
 
@@ -155,17 +208,25 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    """관리자(Flask-Login) 로그아웃"""
     logout_user()
     return redirect(url_for('login'))
+
+@app.route('/ward/logout')
+def ward_logout():
+    """병동(ward_session 쿠키) 로그아웃 — 관리자 세션에 영향 없음"""
+    resp = make_response(redirect(url_for('login')))
+    resp.delete_cookie('ward_session')
+    return resp
 
 # ──────────────────────────────────────────────
 # 간호사 영역
 # ──────────────────────────────────────────────
 
 @app.route('/ward')
-@require_role('nurse')
+@require_ward
 def ward_view():
-    ward = current_user.username
+    ward = _get_ward_user()['username']
     conn = get_db()
     try:
         with conn.cursor() as c:
@@ -199,9 +260,9 @@ def ward_view():
                            status_count=status_count)
 
 @app.route('/api/submit', methods=['POST'])
-@require_role('nurse')
+@require_ward
 def api_submit():
-    ward        = current_user.username
+    ward        = _get_ward_user()['username']
     solution    = request.form.get('solution', '')
     issue       = request.form.get('issue', '')
     description = request.form.get('description', '')
