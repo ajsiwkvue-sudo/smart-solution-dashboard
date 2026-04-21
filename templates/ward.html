@@ -684,7 +684,7 @@
     if (wSyncSec <= 0) {
       clearInterval(wSyncTick);
       if (lbl) lbl.textContent = '업데이트 중…';
-      setTimeout(() => { location.href = '/ward; }, 300);
+      setTimeout(() => { location.href = '/ward'; }, 300);
     }
   }, 1000);
 
@@ -749,7 +749,7 @@
     const btn = document.getElementById('btnSubmit');
     btn.disabled = true; btn.textContent = '접수 중...';
 
-    fetch('/api/submit, {
+    fetch('/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ solution, issue, description: desc })
