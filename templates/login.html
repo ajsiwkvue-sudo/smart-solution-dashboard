@@ -115,12 +115,7 @@
     <p>병동 계정으로 로그인하세요</p>
   </div>
 
-  {% if hint == 'admin' %}
-  <div class="info-box">
-    🔒 관리자 전용 페이지입니다<br>
-    <span style="font-weight:400;font-size:12px">admin 계정으로 로그인해주세요</span>
-  </div>
-  {% endif %}
+  
 
   {% if error %}
   <div class="error-box">
@@ -145,8 +140,7 @@
   </form>
 
   <div class="hint">
-    계정이 없으시면 운영팀에 문의해주세요<br>
-    <strong>관리자: admin / admin1234 (최초 로그인 후 변경 권장)</strong>
+    계정이 없으시면 운영팀에 문의해주세요
   </div>
 
 </div>

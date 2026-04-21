@@ -1,0 +1,17 @@
+[Unit]
+Description=Smart Solution Dashboard (Gunicorn)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/smart_solution
+EnvironmentFile=/home/ubuntu/smart_solution/.env
+ExecStart=/home/ubuntu/smart_solution/venv/bin/gunicorn \
+    --workers 4 \
+    --bind 127.0.0.1:5001 \
+    --timeout 60 \
+    wsgi:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,128 +1,109 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
-import sqlite3, secrets
+import psycopg2
+import psycopg2.extras
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
 
 # ──────────────────────────────────────────────
-# DB
+# Flask-Login 설정
+# ──────────────────────────────────────────────
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = '로그인이 필요합니다.'
+
+class User(UserMixin):
+    def __init__(self, id, username, role):
+        self.id = id
+        self.username = username
+        self.role = role
+
+@login_manager.user_loader
+def load_user(user_id):
+    conn = get_db()
+    try:
+        with conn.cursor() as c:
+            c.execute("SELECT id, username, role FROM users WHERE id = %s", (user_id,))
+            row = c.fetchone()
+        return User(row['id'], row['username'], row['role']) if row else None
+    finally:
+        conn.close()
+
+# ──────────────────────────────────────────────
+# DB (PostgreSQL)
 # ──────────────────────────────────────────────
 
 def get_db():
-    conn = sqlite3.connect('db.sqlite3')
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(
+        os.environ.get('DATABASE_URL'),
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
     return conn
 
 def init_db():
     conn = get_db()
-    c = conn.cursor()
-
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS complaints (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            ward        TEXT,
-            solution    TEXT,
-            issue       TEXT,
-            description TEXT,
-            status      TEXT DEFAULT '접수대기',
-            created_at  TEXT
-        )
-    ''')
     try:
-        c.execute("ALTER TABLE complaints ADD COLUMN status TEXT DEFAULT '접수대기'")
-    except sqlite3.OperationalError:
-        pass
-    c.execute("UPDATE complaints SET status='접수대기' WHERE status='접수됨' OR status IS NULL")
-
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            username      TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role          TEXT NOT NULL DEFAULT 'nurse',
-            access_key    TEXT UNIQUE,
-            created_at    TEXT
-        )
-    ''')
-    # access_key 컬럼이 없는 기존 DB 대응
-    try:
-        c.execute("ALTER TABLE users ADD COLUMN access_key TEXT UNIQUE")
-    except sqlite3.OperationalError:
-        pass
-
-    # 기존 계정에 access_key 없으면 발급
-    c.execute("SELECT id FROM users WHERE access_key IS NULL")
-    for row in c.fetchall():
-        c.execute("UPDATE users SET access_key=? WHERE id=?",
-                  (secrets.token_urlsafe(24), row['id']))
-
-    # 기본 관리자 계정
-    c.execute("SELECT id FROM users WHERE username='admin'")
-    if not c.fetchone():
-        c.execute('''
-            INSERT INTO users (username, password_hash, role, access_key, created_at)
-            VALUES (?, ?, 'admin', ?, ?)
-        ''', ('admin', generate_password_hash('admin1234'),
-              secrets.token_urlsafe(24),
-              datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-
-    conn.commit()
-    conn.close()
+        with conn.cursor() as c:
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS complaints (
+                    id          SERIAL PRIMARY KEY,
+                    ward        TEXT,
+                    solution    TEXT,
+                    issue       TEXT,
+                    description TEXT,
+                    status      TEXT DEFAULT '접수대기',
+                    created_at  TEXT
+                )
+            ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id            SERIAL PRIMARY KEY,
+                    username      TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role          TEXT NOT NULL DEFAULT 'nurse',
+                    created_at    TEXT
+                )
+            ''')
+            # 기본 관리자 계정
+            c.execute("SELECT id FROM users WHERE username='admin'")
+            if not c.fetchone():
+                c.execute('''
+                    INSERT INTO users (username, password_hash, role, created_at)
+                    VALUES (%s, %s, 'admin', %s)
+                ''', ('admin',
+                       generate_password_hash(os.environ.get('ADMIN_PASSWORD', 'admin1234')),
+                       datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        conn.commit()
+    finally:
+        conn.close()
 
 init_db()
 
 # ──────────────────────────────────────────────
-# 키 기반 인증 헬퍼
+# Role 체크 데코레이터
 # ──────────────────────────────────────────────
 
-def get_user_by_key(key):
-    """URL ?key= 또는 X-Access-Key 헤더로 사용자 조회"""
-    if not key:
-        return None
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE access_key=?", (key,))
-    row = c.fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-def get_request_key():
-    return (request.args.get('key', '')
-            or request.form.get('key', '')
-            or request.headers.get('X-Access-Key', ''))
-
 def require_role(role):
-    """데코레이터: 특정 role 필요"""
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            key  = get_request_key()
-            user = get_user_by_key(key)
-            if not user:
+            if not current_user.is_authenticated:
                 return redirect(url_for('login'))
-            if user['role'] != role:
-                # 잘못된 role → 로그인 페이지로
-                return redirect(url_for('login',
-                    hint='admin' if role == 'admin' else 'nurse'))
-            # 현재 사용자를 함수에 주입
-            kwargs['_user'] = user
+            if current_user.role != role:
+                return redirect(url_for('login'))
             return f(*args, **kwargs)
         return decorated
     return decorator
-
-def require_any_login(f):
-    """데코레이터: 로그인만 되어 있으면 통과"""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        key  = get_request_key()
-        user = get_user_by_key(key)
-        if not user:
-            return redirect(url_for('login'))
-        kwargs['_user'] = user
-        return f(*args, **kwargs)
-    return decorated
 
 # ──────────────────────────────────────────────
 # 공통
@@ -134,36 +115,36 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    error = None
-    hint  = request.args.get('hint', '')
+    if current_user.is_authenticated:
+        return redirect(url_for('admin') if current_user.role == 'admin' else url_for('ward_view'))
 
+    error = None
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
 
         conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE username=?", (username,))
-        user = c.fetchone()
-        conn.close()
+        try:
+            with conn.cursor() as c:
+                c.execute("SELECT * FROM users WHERE username=%s", (username,))
+                user = c.fetchone()
+        finally:
+            conn.close()
 
         if user and check_password_hash(user['password_hash'], password):
-            key = user['access_key']
-            if not key:
-                # key 없으면 새로 발급
-                key = secrets.token_urlsafe(24)
-                conn = get_db()
-                conn.execute("UPDATE users SET access_key=? WHERE id=?", (key, user['id']))
-                conn.commit()
-                conn.close()
-
-            if user['role'] == 'admin':
-                return redirect(f"/admin?key={key}")
-            return redirect(f"/ward?key={key}")
+            user_obj = User(user['id'], user['username'], user['role'])
+            login_user(user_obj, remember=False)
+            return redirect(url_for('admin') if user['role'] == 'admin' else url_for('ward_view'))
         else:
             error = '아이디 또는 비밀번호가 올바르지 않습니다'
 
-    return render_template('login.html', error=error, hint=hint)
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
 
 # ──────────────────────────────────────────────
 # 간호사 영역
@@ -171,19 +152,18 @@ def login():
 
 @app.route('/ward')
 @require_role('nurse')
-def ward_view(_user=None):
-    key  = get_request_key()
-    ward = _user['username']
-
+def ward_view():
+    ward = current_user.username
     conn = get_db()
-    c = conn.cursor()
-    c.execute('''
-        SELECT id, ward, solution, issue, description, status, created_at
-        FROM complaints WHERE ward=?
-        ORDER BY id DESC
-    ''', (ward,))
-    complaints = [dict(row) for row in c.fetchall()]
-    conn.close()
+    try:
+        with conn.cursor() as c:
+            c.execute('''
+                SELECT id, ward, solution, issue, description, status, created_at
+                FROM complaints WHERE ward=%s ORDER BY id DESC
+            ''', (ward,))
+            complaints = [dict(r) for r in c.fetchall()]
+    finally:
+        conn.close()
 
     solution_count = {}
     monthly_count  = {}
@@ -197,11 +177,10 @@ def ward_view(_user=None):
             monthly_count[date] = monthly_count.get(date, 0) + 1
         if st in status_count:
             status_count[st] += 1
-
     solution_count = dict(sorted(solution_count.items(), key=lambda x: x[1], reverse=True))
 
     return render_template('ward.html',
-                           ward=ward, key=key,
+                           ward=ward,
                            complaints=complaints,
                            solution_count=solution_count,
                            monthly_count=monthly_count,
@@ -209,8 +188,8 @@ def ward_view(_user=None):
 
 @app.route('/api/submit', methods=['POST'])
 @require_role('nurse')
-def api_submit(_user=None):
-    ward        = _user['username']
+def api_submit():
+    ward        = current_user.username
     solution    = request.form.get('solution', '')
     issue       = request.form.get('issue', '')
     description = request.form.get('description', '')
@@ -220,14 +199,16 @@ def api_submit(_user=None):
 
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn = get_db()
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO complaints (ward, solution, issue, description, status, created_at)
-        VALUES (?, ?, ?, ?, '접수대기', ?)
-    ''', (ward, solution, issue, description, now))
-    conn.commit()
-    complaint_id = c.lastrowid
-    conn.close()
+    try:
+        with conn.cursor() as c:
+            c.execute('''
+                INSERT INTO complaints (ward, solution, issue, description, status, created_at)
+                VALUES (%s, %s, %s, %s, '접수대기', %s) RETURNING id
+            ''', (ward, solution, issue, description, now))
+            complaint_id = c.fetchone()['id']
+        conn.commit()
+    finally:
+        conn.close()
 
     return jsonify({'success': True, 'id': complaint_id,
                     'ward': ward, 'solution': solution,
@@ -239,17 +220,16 @@ def api_submit(_user=None):
 
 @app.route('/admin')
 @require_role('admin')
-def admin(_user=None):
-    key = get_request_key()
-
+def admin():
     conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM complaints ORDER BY id DESC")
-    data = [dict(row) for row in c.fetchall()]
-
-    c.execute("SELECT id, username, access_key, created_at FROM users WHERE role='nurse' ORDER BY id DESC")
-    accounts = [dict(row) for row in c.fetchall()]
-    conn.close()
+    try:
+        with conn.cursor() as c:
+            c.execute("SELECT * FROM complaints ORDER BY id DESC")
+            data = [dict(r) for r in c.fetchall()]
+            c.execute("SELECT id, username, created_at FROM users WHERE role='nurse' ORDER BY id DESC")
+            accounts = [dict(r) for r in c.fetchall()]
+    finally:
+        conn.close()
 
     total          = len(data)
     solution_count = {}
@@ -257,8 +237,8 @@ def admin(_user=None):
     status_count   = {'접수대기': 0, '처리중': 0, '완료': 0}
     current_month  = datetime.now().strftime('%Y-%m')
     latest_month_count = 0
-
     ward_count = {}
+
     for row in data:
         sol    = row['solution']
         status = row['status'] or '접수대기'
@@ -273,13 +253,11 @@ def admin(_user=None):
         if date == current_month:
             latest_month_count += 1
 
-    # 솔루션/병동 정렬 (많은 순)
     solution_count = dict(sorted(solution_count.items(), key=lambda x: x[1], reverse=True))
     ward_count     = dict(sorted(ward_count.items(),     key=lambda x: x[1], reverse=True))
     top_solution   = next(iter(solution_count), '-')
 
     return render_template('admin.html',
-                           key=key,
                            data=data, total=total,
                            solution_count=solution_count,
                            monthly_count=monthly_count,
@@ -291,7 +269,7 @@ def admin(_user=None):
 
 @app.route('/action', methods=['POST'])
 @require_role('admin')
-def action(_user=None):
+def action():
     complaint_id = request.form.get('id')
     act          = request.form.get('action')
     status_map   = {'accept': '처리중', 'complete': '완료'}
@@ -300,42 +278,44 @@ def action(_user=None):
         return jsonify({'success': False, 'error': 'invalid action'}), 400
 
     conn = get_db()
-    c = conn.cursor()
-    c.execute("UPDATE complaints SET status=? WHERE id=?", (new_status, complaint_id))
-    conn.commit()
-    conn.close()
+    try:
+        with conn.cursor() as c:
+            c.execute("UPDATE complaints SET status=%s WHERE id=%s", (new_status, complaint_id))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({'success': True, 'id': complaint_id, 'status': new_status})
 
 @app.route('/api/poll')
 @require_role('admin')
-def poll(_user=None):
+def poll():
     since = request.args.get('since', '')
     conn = get_db()
-    c = conn.cursor()
+    try:
+        with conn.cursor() as c:
+            new_complaints = []
+            if since:
+                c.execute('''
+                    SELECT id, ward, solution, issue, created_at
+                    FROM complaints WHERE created_at > %s ORDER BY id DESC
+                ''', (since,))
+                new_complaints = [dict(r) for r in c.fetchall()]
 
-    new_complaints = []
-    if since:
-        c.execute('''
-            SELECT id, ward, solution, issue, created_at
-            FROM complaints WHERE created_at > ?
-            ORDER BY id DESC
-        ''', (since,))
-        new_complaints = [dict(row) for row in c.fetchall()]
+            c.execute("SELECT status, COUNT(*) as cnt FROM complaints GROUP BY status")
+            status_counts = {'접수대기': 0, '처리중': 0, '완료': 0}
+            for row in c.fetchall():
+                if row['status'] in status_counts:
+                    status_counts[row['status']] = row['cnt']
 
-    c.execute("SELECT status, COUNT(*) as cnt FROM complaints GROUP BY status")
-    status_counts = {'접수대기': 0, '처리중': 0, '완료': 0}
-    for row in c.fetchall():
-        if row['status'] in status_counts:
-            status_counts[row['status']] = row['cnt']
+            c.execute("SELECT COUNT(*) as cnt FROM complaints")
+            total = c.fetchone()['cnt']
 
-    c.execute("SELECT COUNT(*) as cnt FROM complaints")
-    total = c.fetchone()['cnt']
+            c.execute("SELECT created_at FROM complaints ORDER BY id DESC LIMIT 1")
+            row = c.fetchone()
+            latest_time = row['created_at'] if row else ''
+    finally:
+        conn.close()
 
-    c.execute("SELECT created_at FROM complaints ORDER BY id DESC LIMIT 1")
-    row = c.fetchone()
-    latest_time = row['created_at'] if row else ''
-
-    conn.close()
     return jsonify({'new_complaints': new_complaints,
                     'new_count': len(new_complaints),
                     'status_counts': status_counts,
@@ -348,56 +328,60 @@ def poll(_user=None):
 
 @app.route('/admin/accounts/add', methods=['POST'])
 @require_role('admin')
-def add_account(_user=None):
+def add_account():
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '').strip()
 
     if not username or not password:
         return jsonify({'success': False, 'error': '병동명과 비밀번호를 입력해주세요'}), 400
 
-    new_key = secrets.token_urlsafe(24)
+    conn = get_db()
     try:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('''
-            INSERT INTO users (username, password_hash, role, access_key, created_at)
-            VALUES (?, ?, 'nurse', ?, ?)
-        ''', (username, generate_password_hash(password), new_key,
-              datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        with conn.cursor() as c:
+            c.execute('''
+                INSERT INTO users (username, password_hash, role, created_at)
+                VALUES (%s, %s, 'nurse', %s) RETURNING id
+            ''', (username, generate_password_hash(password),
+                   datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            user_id = c.fetchone()['id']
         conn.commit()
-        user_id = c.lastrowid
-        conn.close()
-        return jsonify({'success': True, 'id': user_id,
-                        'username': username, 'access_key': new_key})
-    except sqlite3.IntegrityError:
+        return jsonify({'success': True, 'id': user_id, 'username': username})
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
         return jsonify({'success': False, 'error': '이미 존재하는 병동명입니다'}), 409
+    finally:
+        conn.close()
 
 @app.route('/admin/accounts/delete', methods=['POST'])
 @require_role('admin')
-def delete_account(_user=None):
+def delete_account():
     user_id = request.form.get('id')
     conn = get_db()
-    c = conn.cursor()
-    c.execute("DELETE FROM users WHERE id=? AND role='nurse'", (user_id,))
-    conn.commit()
-    conn.close()
+    try:
+        with conn.cursor() as c:
+            c.execute("DELETE FROM users WHERE id=%s AND role='nurse'", (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({'success': True})
 
 @app.route('/admin/accounts/reset', methods=['POST'])
 @require_role('admin')
-def reset_password(_user=None):
+def reset_password():
     user_id      = request.form.get('id')
     new_password = request.form.get('password', '').strip()
     if not new_password:
         return jsonify({'success': False, 'error': '새 비밀번호를 입력해주세요'}), 400
 
     conn = get_db()
-    c = conn.cursor()
-    c.execute("UPDATE users SET password_hash=? WHERE id=? AND role='nurse'",
-              (generate_password_hash(new_password), user_id))
-    conn.commit()
-    conn.close()
+    try:
+        with conn.cursor() as c:
+            c.execute("UPDATE users SET password_hash=%s WHERE id=%s AND role='nurse'",
+                      (generate_password_hash(new_password), user_id))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({'success': True})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=False, port=5001)

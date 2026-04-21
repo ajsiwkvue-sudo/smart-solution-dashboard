@@ -79,25 +79,6 @@
     .ward-name { font-weight: 700; }
     .created-at { color: #bbb; font-size: 12px; }
 
-    /* 접속 URL */
-    .url-cell { display: flex; align-items: center; gap: 6px; }
-    .url-text {
-      font-family: 'Courier New', monospace;
-      font-size: 11px; color: #555;
-      background: #f4f6fa; border-radius: 6px;
-      padding: 4px 8px; max-width: 280px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .btn-copy {
-      flex-shrink: 0;
-      padding: 4px 10px; border-radius: 6px;
-      border: 1.5px solid #e0e0e0; background: white;
-      font-size: 11px; font-weight: 700; cursor: pointer;
-      color: #666; font-family: inherit; transition: all .2s;
-    }
-    .btn-copy:hover { border-color: #4CAF50; color: #4CAF50; }
-    .btn-copy.copied { border-color: #4CAF50; color: white; background: #4CAF50; }
-
     .btn-reset {
       padding: 5px 12px; border-radius: 20px; border: 1.5px solid #e0e0e0;
       font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
@@ -552,8 +533,8 @@
         </div>
       </div>
     </div>
-    <button class="btn-sm btn-ghost" onclick="location.href='/admin?key='+MY_KEY">🔄 새로고침</button>
-    <a href="/login" class="btn-sm btn-ghost">로그아웃</a>
+    <button class="btn-sm btn-ghost" onclick="location.href='/admin'">🔄 새로고침</button>
+    <a href="/logout" class="btn-sm btn-ghost">로그아웃</a>
   </div>
 </div>
 
@@ -849,8 +830,7 @@
       <thead>
         <tr>
           <th>병동명</th>
-          <th>접속 URL (간호사에게 공유)</th>
-          <th>등록일</th>
+                    <th>등록일</th>
           <th>관리</th>
         </tr>
       </thead>
@@ -859,13 +839,7 @@
           {% for acc in accounts %}
           <tr id="acc-row-{{ acc.id }}">
             <td class="ward-name">{{ acc.username }}</td>
-            <td>
-              <div class="url-cell">
-                <span class="url-text" id="url-{{ acc.id }}">{{ request.url_root }}ward?key={{ acc.access_key }}</span>
-                <button class="btn-copy" onclick="copyUrl({{ acc.id }})">복사</button>
-              </div>
-            </td>
-            <td class="created-at">{{ acc.created_at }}</td>
+<td class="created-at">{{ acc.created_at }}</td>
             <td>
               <button class="btn-reset" onclick="toggleReset({{ acc.id }})">🔑 비번 변경</button>
               <button class="btn-del"   onclick="deleteAccount({{ acc.id }}, '{{ acc.username }}')">삭제</button>
@@ -925,7 +899,7 @@
 
   /* ── 액션 (접수하기 / 완료) ── */
   function doAction(id, act) {
-    fetch('/action?key=' + MY_KEY, {
+    fetch('/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `id=${id}&action=${act}`
@@ -1031,16 +1005,13 @@
     }
   });
 
-  /* ── 현재 탭의 접속 키 ── */
-  const MY_KEY = new URLSearchParams(window.location.search).get('key') || '{{ key }}';
-
   /* ── 실시간 폴링 (새 민원 감지) ── */
   let lastKnownTime  = '';   // 마지막으로 확인한 최신 created_at
   let pendingNewCount = 0;
   let pollTimer = null;
 
   function initPoll() {
-    fetch('/api/poll?key=' + MY_KEY)
+    fetch('/api/poll')
       .then(r => r.json())
       .then(data => {
         // 민원이 없어도 현재 시각을 기준으로 설정 → 이후 접수된 민원 감지
@@ -1051,7 +1022,7 @@
   }
 
   function doPoll() {
-    fetch('/api/poll?key=' + MY_KEY + '&since=' + encodeURIComponent(lastKnownTime))
+    fetch('/api/poll?since=' + encodeURIComponent(lastKnownTime))
       .then(r => r.json())
       .then(data => {
         if (data.new_count > 0) {
@@ -1136,7 +1107,7 @@
 
   function refreshAndDismiss() {
     dismissAlert();
-    location.href = '/admin?key=' + MY_KEY;
+    location.href = '/admin';
   }
 
   /* ── 1분 자동 싱크 ── */
@@ -1154,7 +1125,7 @@
         clearInterval(tick);
         badge.classList.add('syncing');
         label.textContent = '업데이트 중…';
-        setTimeout(() => { location.href = '/admin?key=' + MY_KEY; }, 400);
+        setTimeout(() => { location.href = '/admin'; }, 400);
       }
     }, 1000);
   }
@@ -1199,7 +1170,7 @@
       errEl.style.display = 'block'; return;
     }
 
-    fetch('/admin/accounts/add?key=' + MY_KEY, {
+    fetch('/admin/accounts/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ username, password })
@@ -1218,17 +1189,10 @@
         const emptyRow = tbody.querySelector('.empty-acc');
         if (emptyRow) emptyRow.closest('tr').remove();
         const now = new Date().toISOString().slice(0,19).replace('T',' ');
-        const wardUrl = `${location.origin}/ward?key=${data.access_key}`;
         tbody.insertAdjacentHTML('afterbegin', `
           <tr id="acc-row-${data.id}">
             <td class="ward-name">${data.username}</td>
-            <td>
-              <div class="url-cell">
-                <span class="url-text" id="url-${data.id}">${wardUrl}</span>
-                <button class="btn-copy" onclick="copyUrl(${data.id})">복사</button>
-              </div>
-            </td>
-            <td class="created-at">${now}</td>
+<td class="created-at">${now}</td>
             <td>
               <button class="btn-reset" onclick="toggleReset(${data.id})">🔑 비번 변경</button>
               <button class="btn-del"   onclick="deleteAccount(${data.id},'${data.username}')">삭제</button>
@@ -1249,7 +1213,7 @@
   /* ── 계정 삭제 ── */
   function deleteAccount(id, name) {
     if (!confirm(`"${name}" 계정을 삭제할까요?\n해당 병동의 민원 데이터는 유지됩니다.`)) return;
-    fetch('/admin/accounts/delete?key=' + MY_KEY, {
+    fetch('/admin/accounts/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ id })
@@ -1272,7 +1236,7 @@
   function confirmReset(id) {
     const pw = document.getElementById('rpw-' + id).value.trim();
     if (!pw) { alert('새 비밀번호를 입력해주세요'); return; }
-    fetch('/admin/accounts/reset?key=' + MY_KEY, {
+    fetch('/admin/accounts/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ id, password: pw })
@@ -1286,15 +1250,7 @@
       }
     });
   }
-
-  /* ── URL 복사 ── */
-  function copyUrl(id) {
-    const urlEl = document.getElementById('url-' + id);
-    const btn   = urlEl.closest('.url-cell').querySelector('.btn-copy');
-    navigator.clipboard.writeText(urlEl.textContent).then(() => {
-      btn.textContent = '✓ 복사됨';
-      btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('copied'); }, 2000);
+, 2000);
     });
   }
 
