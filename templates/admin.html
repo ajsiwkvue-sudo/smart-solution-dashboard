@@ -804,11 +804,15 @@
 
   <!-- 계정 추가 -->
   <div class="acc-add-card">
-    <h3>➕ 병동 계정 추가</h3>
+    <h3>➕ 계정 추가</h3>
     <div class="acc-add-row">
       <div class="acc-field">
-        <label>병동명 (아이디)</label>
-        <input type="text" id="newUsername" placeholder="예: 3내과">
+        <label>아이디 <span style="color:#aaa;font-weight:400">(사번 또는 병동명)</span></label>
+        <input type="text" id="newUsername" placeholder="예: N2024001 또는 3내과">
+      </div>
+      <div class="acc-field">
+        <label>소속 병동 <span style="color:#aaa;font-weight:400">(비우면 아이디와 동일)</span></label>
+        <input type="text" id="newWard" placeholder="예: 3내과">
       </div>
       <div class="acc-field">
         <label>비밀번호</label>
@@ -829,8 +833,9 @@
     <table class="acc-table">
       <thead>
         <tr>
-          <th>병동명</th>
-                    <th>등록일</th>
+          <th>아이디</th>
+          <th>소속 병동</th>
+          <th>등록일</th>
           <th>관리</th>
         </tr>
       </thead>
@@ -839,7 +844,8 @@
           {% for acc in accounts %}
           <tr id="acc-row-{{ acc.id }}">
             <td class="ward-name">{{ acc.username }}</td>
-<td class="created-at">{{ acc.created_at }}</td>
+            <td><span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">{{ acc.ward or acc.username }}</span></td>
+            <td class="created-at">{{ acc.created_at }}</td>
             <td>
               <button class="btn-reset" onclick="toggleReset({{ acc.id }})">🔑 비번 변경</button>
               <button class="btn-del"   onclick="deleteAccount({{ acc.id }}, '{{ acc.username }}')">삭제</button>
@@ -852,7 +858,7 @@
           </tr>
           {% endfor %}
         {% else %}
-          <tr><td colspan="3" class="empty-acc">등록된 병동 계정이 없습니다</td></tr>
+          <tr><td colspan="4" class="empty-acc">등록된 계정이 없습니다</td></tr>
         {% endif %}
       </tbody>
     </table>
@@ -1159,6 +1165,7 @@
     /* ── 계정 추가 ── */
   function addAccount() {
     const username = document.getElementById('newUsername').value.trim();
+    const ward     = document.getElementById('newWard').value.trim();
     const password = document.getElementById('newPassword').value.trim();
     const errEl = document.getElementById('accErr');
     const okEl  = document.getElementById('accOk');
@@ -1166,21 +1173,24 @@
     okEl.style.display  = 'none';
 
     if (!username || !password) {
-      errEl.textContent = '병동명과 비밀번호를 모두 입력해주세요';
+      errEl.textContent = '아이디와 비밀번호를 모두 입력해주세요';
       errEl.style.display = 'block'; return;
     }
+
+    const displayWard = ward || username;
 
     fetch('/admin/accounts/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ username, password })
+      body: new URLSearchParams({ username, ward, password })
     })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        okEl.textContent = `✅ "${username}" 계정이 추가되었습니다`;
+        okEl.textContent = `✅ "${username}" (${displayWard}) 계정이 추가되었습니다`;
         okEl.style.display = 'block';
         document.getElementById('newUsername').value = '';
+        document.getElementById('newWard').value     = '';
         document.getElementById('newPassword').value = '';
         document.getElementById('accCount').textContent =
           (parseInt(document.getElementById('accCount').textContent) + 1) + '개';
@@ -1191,6 +1201,7 @@
         tbody.insertAdjacentHTML('afterbegin', `
           <tr id="acc-row-${data.id}">
             <td class="ward-name">${data.username}</td>
+            <td><span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">${displayWard}</span></td>
             <td class="created-at">${now}</td>
             <td>
               <button class="btn-reset" onclick="toggleReset(${data.id})">🔑 비번 변경</button>

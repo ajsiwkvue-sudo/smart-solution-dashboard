@@ -39,10 +39,11 @@ def _cookie_name(ward_name):
     """병동별 고유 쿠키 이름 반환 — ward_session_병동명"""
     return f'ward_session_{ward_name}'
 
-def _set_ward_cookie(response, username, user_id):
-    token = _ward_serializer.dumps({'u': username, 'i': user_id})
+def _set_ward_cookie(response, username, user_id, ward):
+    """ward 기준 쿠키 이름으로 서명 토큰 설정. 토큰에 사번(u)·id(i)·병동(w) 포함."""
+    token = _ward_serializer.dumps({'u': username, 'i': user_id, 'w': ward})
     response.set_cookie(
-        _cookie_name(username), token,
+        _cookie_name(ward), token,
         max_age=86400 * 7,
         httponly=True,
         samesite='Lax'
@@ -50,13 +51,18 @@ def _set_ward_cookie(response, username, user_id):
     return response
 
 def _get_ward_user(ward_name):
-    """ward_session_<ward_name> 쿠키를 검증해 사용자 정보를 반환."""
+    """ward_session_<ward_name> 쿠키를 검증해 사용자 정보를 반환.
+    반환값: {'username': 사번, 'id': DB id, 'ward': 소속병동}"""
     token = request.cookies.get(_cookie_name(ward_name))
     if not token:
         return None
     try:
         data = _ward_serializer.loads(token, max_age=86400 * 7)
-        return {'username': data['u'], 'id': data['i']}
+        return {
+            'username': data['u'],
+            'id':       data['i'],
+            'ward':     data.get('w', ward_name)  # 구버전 쿠키 호환
+        }
     except (BadSignature, SignatureExpired):
         return None
 
@@ -117,13 +123,14 @@ def init_db():
         with conn.cursor() as c:
             c.execute('''
                 CREATE TABLE IF NOT EXISTS complaints (
-                    id          SERIAL PRIMARY KEY,
-                    ward        TEXT,
-                    solution    TEXT,
-                    issue       TEXT,
-                    description TEXT,
-                    status      TEXT DEFAULT '접수대기',
-                    created_at  TEXT
+                    id           SERIAL PRIMARY KEY,
+                    ward         TEXT,
+                    solution     TEXT,
+                    issue        TEXT,
+                    description  TEXT,
+                    status       TEXT DEFAULT '접수대기',
+                    submitted_by TEXT,
+                    created_at   TEXT
                 )
             ''')
             c.execute('''
@@ -132,9 +139,18 @@ def init_db():
                     username      TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
                     role          TEXT NOT NULL DEFAULT 'nurse',
+                    ward          TEXT,
                     created_at    TEXT
                 )
             ''')
+            # 기존 DB 컬럼 추가 (이미 있으면 무시)
+            c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS ward TEXT")
+            c.execute("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS submitted_by TEXT")
+            # 기존 nurse 계정 마이그레이션: ward = username (병동명이 곧 ID였던 구조)
+            c.execute("""
+                UPDATE users SET ward = username
+                WHERE role = 'nurse' AND ward IS NULL
+            """)
             # 기본 관리자 계정
             c.execute("SELECT id FROM users WHERE username='admin'")
             if not c.fetchone():
@@ -207,9 +223,10 @@ def login():
                 return redirect(url_for('admin'))
             else:
                 # 간호사: 병동별 쿠키 사용 (Flask-Login 세션에 영향 없음)
-                # 여러 병동을 동시에 로그인해도 쿠키가 겹치지 않음
-                resp = make_response(redirect(url_for('ward_view', ward_name=user['username'])))
-                _set_ward_cookie(resp, user['username'], user['id'])
+                # ward 컬럼 = 소속 병동 (EMR 연동 시 EMR에서 받아온 값으로 대체)
+                ward = user['ward'] or user['username']  # 마이그레이션 전 계정 fallback
+                resp = make_response(redirect(url_for('ward_view', ward_name=ward)))
+                _set_ward_cookie(resp, user['username'], user['id'], ward)
                 return resp
         else:
             error = '아이디 또는 비밀번호가 올바르지 않습니다'
@@ -291,11 +308,13 @@ def ward_poll(ward_name):
 @app.route('/api/submit', methods=['POST'])
 @require_ward
 def api_submit():
-    ward_name   = request.form.get('ward', '')
-    ward        = _get_ward_user(ward_name)['username']
-    solution    = request.form.get('solution', '')
-    issue       = request.form.get('issue', '')
-    description = request.form.get('description', '')
+    ward_name    = request.form.get('ward', '')
+    ward_user    = _get_ward_user(ward_name)
+    ward         = ward_user['ward']          # 소속 병동 (complaints.ward)
+    submitted_by = ward_user['username']      # 접수한 개인 계정 (사번 또는 병동명)
+    solution     = request.form.get('solution', '')
+    issue        = request.form.get('issue', '')
+    description  = request.form.get('description', '')
 
     if not solution or not issue:
         return jsonify({'success': False, 'error': '솔루션과 문제 유형은 필수입니다'}), 400
@@ -305,9 +324,9 @@ def api_submit():
     try:
         with conn.cursor() as c:
             c.execute('''
-                INSERT INTO complaints (ward, solution, issue, description, status, created_at)
-                VALUES (%s, %s, %s, %s, '접수대기', %s) RETURNING id
-            ''', (ward, solution, issue, description, now))
+                INSERT INTO complaints (ward, solution, issue, description, status, submitted_by, created_at)
+                VALUES (%s, %s, %s, %s, '접수대기', %s, %s) RETURNING id
+            ''', (ward, solution, issue, description, submitted_by, now))
             complaint_id = c.fetchone()['id']
         conn.commit()
     finally:
@@ -329,7 +348,7 @@ def admin():
         with conn.cursor() as c:
             c.execute("SELECT * FROM complaints ORDER BY id DESC")
             data = [dict(r) for r in c.fetchall()]
-            c.execute("SELECT id, username, created_at FROM users WHERE role='nurse' ORDER BY id DESC")
+            c.execute("SELECT id, username, ward, created_at FROM users WHERE role='nurse' ORDER BY id DESC")
             accounts = [dict(r) for r in c.fetchall()]
     finally:
         conn.close()
@@ -432,23 +451,27 @@ def poll():
 @app.route('/admin/accounts/add', methods=['POST'])
 @require_role('admin')
 def add_account():
-    username = request.form.get('username', '').strip()
+    username = request.form.get('username', '').strip()  # 사번 또는 병동명
+    ward     = request.form.get('ward', '').strip()      # 소속 병동 (비어있으면 username과 동일)
     password = request.form.get('password', '').strip()
 
     if not username or not password:
-        return jsonify({'success': False, 'error': '병동명과 비밀번호를 입력해주세요'}), 400
+        return jsonify({'success': False, 'error': '아이디와 비밀번호를 입력해주세요'}), 400
+
+    if not ward:
+        ward = username  # 병동 계정 방식 호환: ward 미입력 시 username = ward
 
     conn = get_db()
     try:
         with conn.cursor() as c:
             c.execute('''
-                INSERT INTO users (username, password_hash, role, created_at)
-                VALUES (%s, %s, 'nurse', %s) RETURNING id
-            ''', (username, generate_password_hash(password),
+                INSERT INTO users (username, password_hash, role, ward, created_at)
+                VALUES (%s, %s, 'nurse', %s, %s) RETURNING id
+            ''', (username, generate_password_hash(password), ward,
                    datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
             user_id = c.fetchone()['id']
         conn.commit()
-        return jsonify({'success': True, 'id': user_id, 'username': username})
+        return jsonify({'success': True, 'id': user_id, 'username': username, 'ward': ward})
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
         return jsonify({'success': False, 'error': '이미 존재하는 병동명입니다'}), 409
