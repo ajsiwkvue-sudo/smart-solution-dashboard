@@ -32,7 +32,7 @@ def init_db():
     ''')
     try:
         c.execute("ALTER TABLE complaints ADD COLUMN status TEXT DEFAULT '접수대기'")
-    except:
+    except sqlite3.OperationalError:
         pass
     c.execute("UPDATE complaints SET status='접수대기' WHERE status='접수됨' OR status IS NULL")
 
@@ -49,7 +49,7 @@ def init_db():
     # access_key 컬럼이 없는 기존 DB 대응
     try:
         c.execute("ALTER TABLE users ADD COLUMN access_key TEXT UNIQUE")
-    except:
+    except sqlite3.OperationalError:
         pass
 
     # 기존 계정에 access_key 없으면 발급

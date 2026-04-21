@@ -861,7 +861,7 @@
             <td class="ward-name">{{ acc.username }}</td>
             <td>
               <div class="url-cell">
-                <span class="url-text" id="url-{{ acc.id }}">http://127.0.0.1:5001/ward?key={{ acc.access_key }}</span>
+                <span class="url-text" id="url-{{ acc.id }}">{{ request.url_root }}ward?key={{ acc.access_key }}</span>
                 <button class="btn-copy" onclick="copyUrl({{ acc.id }})">복사</button>
               </div>
             </td>
