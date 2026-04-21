@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
@@ -102,7 +102,9 @@ def require_role(role):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            is_api = request.path.startswith('/api/') or request.path == '/action'
+            is_api = (request.path.startswith('/api/') or
+                      request.path == '/action' or
+                      request.path.startswith('/admin/accounts/'))
             if not current_user.is_authenticated:
                 if is_api:
                     return jsonify({'success': False, 'error': '로그인이 필요합니다. 페이지를 새로고침해주세요.'}), 401
@@ -142,7 +144,8 @@ def login():
         if user and check_password_hash(user['password_hash'], password):
             logout_user()  # 기존 세션 먼저 종료 (계정 전환 지원)
             user_obj = User(user['id'], user['username'], user['role'])
-            login_user(user_obj, remember=False)
+            login_user(user_obj, remember=True)   # 브라우저 닫아도 세션 유지
+            session.permanent = True              # 7일 유지
             return redirect(url_for('admin') if user['role'] == 'admin' else url_for('ward_view'))
         else:
             error = '아이디 또는 비밀번호가 올바르지 않습니다'

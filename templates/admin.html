@@ -1016,7 +1016,7 @@
       .then(data => {
         // 민원이 없어도 현재 시각을 기준으로 설정 → 이후 접수된 민원 감지
         lastKnownTime = data.latest_time || new Date().toISOString().slice(0,19).replace('T',' ');
-        pollTimer = setInterval(doPoll, 10000);   // 10초 간격
+        pollTimer = setInterval(doPoll, 3000);    // 3초 간격 (빠른 알람)
       })
       .catch(() => {});
   }
