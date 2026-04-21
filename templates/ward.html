@@ -358,7 +358,7 @@
       <span class="sync-dot"></span>
       <span id="wardSyncLabel">1:00</span>
     </div>
-    <a href="/ward/logout" class="btn-logout">로그아웃</a>
+    <a href="/ward/{{ ward }}/logout" class="btn-logout">로그아웃</a>
   </div>
 </div>
 
@@ -568,7 +568,7 @@
       <div class="success-sub">담당자가 확인 후 처리할 예정입니다</div>
       <div class="success-num" id="successNum">#-</div>
       <button class="btn-more p" onclick="submitAnother()">➕ 추가 접수</button>
-      <button class="btn-more s" onclick="window.location.href='/ward'">📋 현황 확인</button>
+      <button class="btn-more s" onclick="window.location.href='/ward/{{ ward }}'">📋 현황 확인</button>
     </div>
 
   </div>
@@ -684,7 +684,7 @@
     if (wSyncSec <= 0) {
       clearInterval(wSyncTick);
       if (lbl) lbl.textContent = '업데이트 중…';
-      setTimeout(() => { location.href = '/ward'; }, 300);
+      setTimeout(() => { location.href = '/ward/{{ ward }}'; }, 300);
     }
   }, 1000);
 
@@ -752,7 +752,7 @@
     fetch('/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ solution, issue, description: desc })
+      body: new URLSearchParams({ solution, issue, description: desc, ward: '{{ ward }}' })
     })
     .then(r => r.json())
     .then(data => {

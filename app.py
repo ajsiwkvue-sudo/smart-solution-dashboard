@@ -35,19 +35,23 @@ _ward_serializer = URLSafeTimedSerializer(
     app.secret_key, salt='ward-session-salt'
 )
 
+def _cookie_name(ward_name):
+    """병동별 고유 쿠키 이름 반환 — ward_session_병동명"""
+    return f'ward_session_{ward_name}'
+
 def _set_ward_cookie(response, username, user_id):
     token = _ward_serializer.dumps({'u': username, 'i': user_id})
     response.set_cookie(
-        'ward_session', token,
+        _cookie_name(username), token,
         max_age=86400 * 7,
         httponly=True,
         samesite='Lax'
     )
     return response
 
-def _get_ward_user():
-    """ward_session 쿠키에서 병동 사용자 정보를 반환. 없거나 만료면 None."""
-    token = request.cookies.get('ward_session')
+def _get_ward_user(ward_name):
+    """ward_session_<ward_name> 쿠키를 검증해 사용자 정보를 반환."""
+    token = request.cookies.get(_cookie_name(ward_name))
     if not token:
         return None
     try:
@@ -57,11 +61,17 @@ def _get_ward_user():
         return None
 
 def require_ward(f):
-    """병동 전용 라우트 보호 데코레이터 (ward_session 쿠키 검사)"""
+    """병동 전용 라우트 보호 데코레이터.
+    URL 파라미터 ward_name 또는 폼 필드 ward 로 어느 병동 쿠키를 확인할지 결정."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        ward_user = _get_ward_user()
+        ward_name = kwargs.get('ward_name') or request.form.get('ward', '')
         is_api = request.path.startswith('/api/')
+        if not ward_name:
+            if is_api:
+                return jsonify({'success': False, 'error': '병동 정보가 없습니다.'}), 400
+            return redirect(url_for('login'))
+        ward_user = _get_ward_user(ward_name)
         if not ward_user:
             if is_api:
                 return jsonify({'success': False,
@@ -196,8 +206,9 @@ def login():
                 session.permanent = True
                 return redirect(url_for('admin'))
             else:
-                # 간호사: ward_session 쿠키 사용 (Flask-Login 세션에 영향 없음)
-                resp = make_response(redirect(url_for('ward_view')))
+                # 간호사: 병동별 쿠키 사용 (Flask-Login 세션에 영향 없음)
+                # 여러 병동을 동시에 로그인해도 쿠키가 겹치지 않음
+                resp = make_response(redirect(url_for('ward_view', ward_name=user['username'])))
                 _set_ward_cookie(resp, user['username'], user['id'])
                 return resp
         else:
@@ -212,21 +223,21 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/ward/logout')
-def ward_logout():
-    """병동(ward_session 쿠키) 로그아웃 — 관리자 세션에 영향 없음"""
+@app.route('/ward/<ward_name>/logout')
+def ward_logout(ward_name):
+    """해당 병동 쿠키만 삭제 — 다른 병동·관리자 세션에 영향 없음"""
     resp = make_response(redirect(url_for('login')))
-    resp.delete_cookie('ward_session')
+    resp.delete_cookie(_cookie_name(ward_name))
     return resp
 
 # ──────────────────────────────────────────────
 # 간호사 영역
 # ──────────────────────────────────────────────
 
-@app.route('/ward')
+@app.route('/ward/<ward_name>')
 @require_ward
-def ward_view():
-    ward = _get_ward_user()['username']
+def ward_view(ward_name):
+    ward = _get_ward_user(ward_name)['username']
     conn = get_db()
     try:
         with conn.cursor() as c:
@@ -262,7 +273,8 @@ def ward_view():
 @app.route('/api/submit', methods=['POST'])
 @require_ward
 def api_submit():
-    ward        = _get_ward_user()['username']
+    ward_name   = request.form.get('ward', '')
+    ward        = _get_ward_user(ward_name)['username']
     solution    = request.form.get('solution', '')
     issue       = request.form.get('issue', '')
     description = request.form.get('description', '')
