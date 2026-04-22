@@ -511,6 +511,58 @@
     #toast.show { opacity: 1; transform: translateY(0); }
 
     .empty-td { text-align: center; padding: 40px; color: #ccc; font-size: 14px; }
+
+    /* ── 달력 ── */
+    .cal-inner { display: grid; grid-template-columns: 280px 1fr; gap: 20px; min-height: 210px; }
+    .cal-nav-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .cal-nav-btn {
+      background: none; border: 1.5px solid #e0e0e0; border-radius: 8px;
+      width: 28px; height: 28px; cursor: pointer; font-size: 15px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      color: #666; transition: all .2s; font-family: inherit;
+    }
+    .cal-nav-btn:hover { border-color: #4CAF50; color: #4CAF50; }
+    .cal-month-ttl { font-size: 13px; font-weight: 800; color: #333; }
+    .cal-wdays { display: grid; grid-template-columns: repeat(7,1fr); margin-bottom: 3px; }
+    .cal-wdays span { text-align: center; font-size: 10px; font-weight: 700; color: #bbb; padding: 3px 0; }
+    .cal-wdays .wday-sat { color: #90caf9; }
+    .cal-wdays .wday-sun { color: #ef9a9a; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+    .cal-cell {
+      aspect-ratio: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      border-radius: 8px; cursor: pointer;
+      font-size: 12px; font-weight: 600; color: #444;
+      position: relative; transition: background .12s;
+      min-height: 32px; user-select: none;
+    }
+    .cal-cell:hover:not(.cal-empty) { background: #f5f5f5; }
+    .cal-cell.cal-today { background: #e8f5e9; color: #2e7d32; font-weight: 800; }
+    .cal-cell.cal-selected { background: #4CAF50 !important; color: white !important; }
+    .cal-cell.cal-empty { cursor: default; }
+    .cal-cell.cal-sat { color: #90caf9; }
+    .cal-cell.cal-sun { color: #ef9a9a; }
+    .cal-dot {
+      position: absolute; bottom: 3px;
+      width: 5px; height: 5px; border-radius: 50%; background: #4CAF50;
+    }
+    .cal-cell.cal-selected .cal-dot { background: rgba(255,255,255,.7); }
+    .cal-right-pane { display: flex; flex-direction: column; border-left: 1px solid #f0f0f0; padding-left: 20px; }
+    .cal-no-sel { flex: 1; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 12px; text-align: center; line-height: 2; }
+    .cal-det-hdr { font-size: 13px; font-weight: 800; color: #333; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0; }
+    .cal-det-scroll { overflow-y: auto; max-height: 180px; }
+    .cal-det-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; margin-bottom: 3px; background: #fafbff; }
+    .cal-det-id   { font-size: 11px; color: #ccc; font-weight: 700; min-width: 26px; }
+    .cal-det-ward { font-size: 12px; font-weight: 700; color: #333; min-width: 46px; white-space: nowrap; }
+    .cal-det-sol  { font-size: 11px; color: #666; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cal-stat-chip { padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .csc-접수대기 { background: #fce4ec; color: #c62828; }
+    .csc-처리중   { background: #fff8e1; color: #e65100; }
+    .csc-완료     { background: #e8f5e9; color: #2e7d32; }
+    @media (max-width: 700px) {
+      .cal-inner { grid-template-columns: 1fr; }
+      .cal-right-pane { border-left: none; border-top: 1px solid #f0f0f0; padding-left: 0; padding-top: 14px; margin-top: 14px; }
+    }
   </style>
 </head>
 <body>
@@ -692,6 +744,35 @@
 
   </div>
 
+  <!-- 달력 -->
+  <div class="chart-box" style="margin-bottom:18px">
+    <div class="chart-box-header">
+      <h3>📆 날짜별 접수 현황</h3>
+      <p>날짜를 클릭하면 해당 일의 민원 목록이 표시됩니다</p>
+    </div>
+    <div class="cal-inner">
+      <div>
+        <div class="cal-nav-hdr">
+          <button class="cal-nav-btn" onclick="calPrev()">‹</button>
+          <span class="cal-month-ttl" id="calMonthTtl"></span>
+          <button class="cal-nav-btn" onclick="calNext()">›</button>
+        </div>
+        <div class="cal-wdays">
+          <span>월</span><span>화</span><span>수</span><span>목</span><span>금</span>
+          <span class="wday-sat">토</span><span class="wday-sun">일</span>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+      <div class="cal-right-pane">
+        <div class="cal-no-sel" id="calNoSel">📆 날짜를 선택하면<br>해당 일의 접수 목록이 표시됩니다</div>
+        <div id="calDetPane" style="display:none">
+          <div class="cal-det-hdr" id="calDetHdr"></div>
+          <div class="cal-det-scroll" id="calDetScroll"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 필터 -->
   <div class="filter-bar">
     <span style="font-size:14px">🔍</span>
@@ -738,7 +819,8 @@
               data-ward="{{ row.ward }}"
               data-solution="{{ row.solution }}"
               data-status="{{ status }}"
-              data-month="{{ row.created_at[0:7] if row.created_at else '' }}">
+              data-month="{{ row.created_at[0:7] if row.created_at else '' }}"
+              data-date="{{ row.created_at[0:10] if row.created_at else '' }}">
             <td class="id-cell">#{{ row.id }}</td>
             <td class="ward-cell">{{ row.ward }}</td>
             <td><span class="sol-tag">{{ row.solution }}</span></td>
@@ -1137,6 +1219,80 @@
 
   // 페이지 로드 후 폴링 시작
   document.addEventListener('DOMContentLoaded', initPoll);
+
+  /* ── 달력 ── */
+  (function(){
+    const _today = new Date();
+    let _cy = _today.getFullYear(), _cm = _today.getMonth(), _sel = null;
+
+    function _dateMap() {
+      const m = {};
+      document.querySelectorAll('#tableBody tr[data-date]').forEach(tr => {
+        const d = tr.dataset.date; if (!d) return;
+        if (!m[d]) m[d] = [];
+        m[d].push({
+          id: tr.querySelector('.id-cell')?.textContent.replace('#','').trim()||'',
+          ward: tr.dataset.ward||'',
+          solution: tr.dataset.solution||'',
+          status: tr.dataset.status||'접수대기'
+        });
+      });
+      return m;
+    }
+
+    function _render() {
+      const map = _dateMap();
+      document.getElementById('calMonthTtl').textContent = `${_cy}년 ${_cm+1}월`;
+      const grid = document.getElementById('calGrid');
+      grid.innerHTML = '';
+      const firstDow = (new Date(_cy,_cm,1).getDay()+6)%7;
+      const dim = new Date(_cy,_cm+1,0).getDate();
+      for (let i=0;i<firstDow;i++){
+        const el=document.createElement('div'); el.className='cal-cell cal-empty'; grid.appendChild(el);
+      }
+      for (let d=1;d<=dim;d++){
+        const ds=`${_cy}-${String(_cm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const dow=new Date(_cy,_cm,d).getDay();
+        let cls='cal-cell';
+        if(dow===6) cls+=' cal-sat';
+        if(dow===0) cls+=' cal-sun';
+        if(_cy===_today.getFullYear()&&_cm===_today.getMonth()&&d===_today.getDate()) cls+=' cal-today';
+        if(ds===_sel) cls+=' cal-selected';
+        const el=document.createElement('div'); el.className=cls;
+        el.innerHTML=`<span>${d}</span>${map[ds]?'<span class="cal-dot"></span>':''}`;
+        el.onclick=()=>_pick(ds);
+        grid.appendChild(el);
+      }
+      _renderDet(map);
+    }
+
+    function _pick(ds){ _sel=_sel===ds?null:ds; _render(); }
+
+    function _renderDet(map){
+      const noSel=document.getElementById('calNoSel');
+      const pane=document.getElementById('calDetPane');
+      const hdr=document.getElementById('calDetHdr');
+      const scroll=document.getElementById('calDetScroll');
+      if(!_sel){ noSel.style.display=''; pane.style.display='none'; return; }
+      noSel.style.display='none'; pane.style.display='';
+      const items=map[_sel]||[];
+      const [y,mo,d]=_sel.split('-');
+      hdr.textContent=`${y}년 ${parseInt(mo)}월 ${parseInt(d)}일 · ${items.length}건`;
+      scroll.innerHTML=items.length===0
+        ?'<div style="text-align:center;color:#ccc;padding:20px;font-size:13px">이 날 접수된 민원이 없습니다</div>'
+        :items.map(c=>`
+          <div class="cal-det-item">
+            <span class="cal-det-id">#${c.id}</span>
+            <span class="cal-det-ward">${c.ward}</span>
+            <span class="cal-det-sol">${c.solution}</span>
+            <span class="cal-stat-chip csc-${c.status}">${c.status}</span>
+          </div>`).join('');
+    }
+
+    window.calPrev=()=>{ _cm--; if(_cm<0){_cm=11;_cy--;} _render(); };
+    window.calNext=()=>{ _cm++; if(_cm>11){_cm=0;_cy++;} _render(); };
+    document.addEventListener('DOMContentLoaded', _render);
+  })();
 
   /* ── 탭 전환 ── */
   function switchTab(tab) {
