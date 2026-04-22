@@ -330,40 +330,10 @@
     .rank-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4CAF50, #81C784); transition: width .6s ease; }
     .rank-val { font-size: 12px; font-weight: 800; color: #333; white-space: nowrap; min-width: 28px; text-align: right; }
 
-    /* ── 랭킹 드롭다운 필터 ── */
-    .rank-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-    .rank-hdr-text h3 { font-size: 13px; font-weight: 800; color: #333; }
-    .rank-hdr-text p  { font-size: 11px; color: #bbb; margin-top: 2px; }
-    .filter-dd-wrap   { position: relative; }
-    .filter-dd-btn {
-      display: flex; align-items: center; gap: 5px;
-      padding: 5px 12px; border-radius: 20px;
-      border: 1.5px solid #e0e0e0; background: white;
-      font-size: 11px; font-weight: 700; cursor: pointer;
-      color: #666; font-family: inherit; transition: all .2s;
-      white-space: nowrap;
-    }
-    .filter-dd-btn:hover { border-color: #4CAF50; color: #4CAF50; }
-    .filter-dd-btn.on   { background: #4CAF50; border-color: #4CAF50; color: white; }
-    .filter-dd-btn .arrow { font-size: 9px; transition: transform .2s; }
-    .filter-dd-btn.open .arrow { transform: rotate(180deg); }
-    .filter-dd {
-      position: absolute; right: 0; top: calc(100% + 5px);
-      background: white; border-radius: 12px;
-      box-shadow: 0 8px 28px rgba(0,0,0,.14);
-      border: 1px solid #f0f0f0;
-      min-width: 170px; z-index: 200;
-      overflow: hidden;
-      display: none;
-    }
-    .filter-dd.open { display: block; }
-    .filter-dd-opt {
-      padding: 9px 14px; font-size: 12px; cursor: pointer;
-      color: #444; transition: background .12s; font-weight: 600;
-    }
-    .filter-dd-opt:hover { background: #f5f5f5; }
-    .filter-dd-opt.active { background: #e8f5e9; color: #2e7d32; }
-    .filter-dd-opt.all-opt { border-bottom: 1px solid #f5f5f5; color: #888; font-weight: 700; }
+    /* ── 랭킹 헤더 ── */
+    .rank-hdr { margin-bottom: 16px; }
+    .rank-hdr h3 { font-size: 13px; font-weight: 800; color: #333; }
+    .rank-hdr p  { font-size: 11px; color: #bbb; margin-top: 2px; }
 
     /* ── 필터 바 ── */
     .filter-bar {
@@ -674,25 +644,11 @@
   <!-- 스탯 Row 2 -->
   <div class="chart-grid-bottom">
 
-    <!-- 솔루션별 랭킹 + 드롭다운 필터 -->
-    <div class="chart-box" style="overflow:visible">
+    <!-- 솔루션별 랭킹 -->
+    <div class="chart-box">
       <div class="rank-hdr">
-        <div class="rank-hdr-text">
-          <h3>🔧 솔루션별 민원 건수</h3>
-          <p>접수 많은 순 정렬</p>
-        </div>
-        <div class="filter-dd-wrap">
-          <button class="filter-dd-btn" id="solFilterBtn" onclick="toggleDD('sol')">
-            <span id="solFilterLabel">필터</span>
-            <span class="arrow">▾</span>
-          </button>
-          <div class="filter-dd" id="solDD">
-            <div class="filter-dd-opt all-opt" onclick="applyDD('sol','')">전체 보기</div>
-            {% for sol in solution_count.keys() %}
-            <div class="filter-dd-opt" data-val="{{ sol }}" onclick="applyDD('sol','{{ sol }}')">{{ sol }}</div>
-            {% endfor %}
-          </div>
-        </div>
+        <h3>🔧 솔루션별 민원 건수</h3>
+        <p>접수 많은 순 정렬</p>
       </div>
       {% set sol_max = solution_count.values() | max if solution_count else 1 %}
       <div class="rank-list">
@@ -711,25 +667,11 @@
       </div>
     </div>
 
-    <!-- 병동별 랭킹 + 드롭다운 필터 -->
-    <div class="chart-box" style="overflow:visible">
+    <!-- 병동별 랭킹 -->
+    <div class="chart-box">
       <div class="rank-hdr">
-        <div class="rank-hdr-text">
-          <h3>🏥 병동별 민원 건수</h3>
-          <p>접수 많은 순 정렬</p>
-        </div>
-        <div class="filter-dd-wrap">
-          <button class="filter-dd-btn" id="wardFilterBtn" onclick="toggleDD('ward')">
-            <span id="wardFilterLabel">필터</span>
-            <span class="arrow">▾</span>
-          </button>
-          <div class="filter-dd" id="wardDD">
-            <div class="filter-dd-opt all-opt" onclick="applyDD('ward','')">전체 보기</div>
-            {% for ward_name in ward_count.keys() %}
-            <div class="filter-dd-opt" data-val="{{ ward_name }}" onclick="applyDD('ward','{{ ward_name }}')">{{ ward_name }}</div>
-            {% endfor %}
-          </div>
-        </div>
+        <h3>🏥 병동별 민원 건수</h3>
+        <p>접수 많은 순 정렬</p>
       </div>
       {% set ward_max = ward_count.values() | max if ward_count else 1 %}
       <div class="rank-list">
@@ -1041,58 +983,6 @@
     });
     applyFilter();
   }
-
-  /* ══════════════════════════════════════════
-     랭킹 카드 드롭다운 필터
-     ─ 테이블/차트와 완전히 독립
-     ─ 랭킹 카드 내부 하이라이트만 변경
-  ══════════════════════════════════════════ */
-  function toggleDD(type) {
-    const dd  = document.getElementById(type === 'sol' ? 'solDD'  : 'wardDD');
-    const btn = document.getElementById(type === 'sol' ? 'solFilterBtn' : 'wardFilterBtn');
-    const isOpen = dd.classList.contains('open');
-    ['solDD','wardDD'].forEach(id => document.getElementById(id).classList.remove('open'));
-    ['solFilterBtn','wardFilterBtn'].forEach(id => document.getElementById(id).classList.remove('open'));
-    if (!isOpen) { dd.classList.add('open'); btn.classList.add('open'); }
-  }
-
-  function applyDD(type, value) {
-    const isSol = type === 'sol';
-    const dd    = document.getElementById(isSol ? 'solDD'        : 'wardDD');
-    const btn   = document.getElementById(isSol ? 'solFilterBtn' : 'wardFilterBtn');
-    const label = document.getElementById(isSol ? 'solFilterLabel' : 'wardFilterLabel');
-    // ── 랭킹 리스트 행 하이라이트 (카드 내부만) ──
-    const card  = dd.closest('.chart-box');
-    card.querySelectorAll('.rank-item').forEach(row => {
-      const match = row.querySelector('.rank-name')?.textContent.trim() === value;
-      row.style.background  = (value && match) ? '#e8f5e9' : '';
-      row.style.fontWeight  = (value && match) ? '800'     : '';
-      row.style.borderRadius = (value && match) ? '8px'    : '';
-    });
-    // ── 버튼 레이블 ──
-    if (value) {
-      btn.classList.add('on');
-      label.textContent = value.length > 6 ? value.slice(0, 6) + '…' : value;
-    } else {
-      btn.classList.remove('on');
-      label.textContent = '필터';
-    }
-    // ── 드롭다운 옵션 체크 표시 ──
-    dd.querySelectorAll('.filter-dd-opt').forEach(opt => {
-      opt.classList.toggle('active', opt.dataset.val === value && value !== '');
-    });
-    dd.classList.remove('open');
-    btn.classList.remove('open');
-    // ── 테이블·차트 일절 건드리지 않음 ──
-  }
-
-  // 드롭다운 외부 클릭 시 닫기
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.filter-dd-wrap')) {
-      ['solDD','wardDD'].forEach(id => document.getElementById(id)?.classList.remove('open'));
-      ['solFilterBtn','wardFilterBtn'].forEach(id => document.getElementById(id)?.classList.remove('open'));
-    }
-  });
 
   /* ── 실시간 폴링 (새 민원 감지) ── */
   let lastKnownTime  = '';   // 마지막으로 확인한 최신 created_at
