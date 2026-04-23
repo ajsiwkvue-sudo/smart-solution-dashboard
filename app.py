@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
+app.secret_key = os.environ['SECRET_KEY']  # .env 필수 - fallback 없음
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7일
 
@@ -160,7 +160,7 @@ def init_db():
                     INSERT INTO users (username, password_hash, role, created_at)
                     VALUES (%s, %s, 'admin', %s)
                 ''', ('admin',
-                       generate_password_hash(os.environ.get('ADMIN_PASSWORD', 'admin1234')),
+                       generate_password_hash(os.environ['ADMIN_PASSWORD'])  # .env 필수 - fallback 없음,
                        datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         conn.commit()
     finally:
