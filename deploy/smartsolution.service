@@ -1,17 +1,39 @@
+# ──────────────────────────────────────────────────────────────
+# Smart Solution Dashboard — systemd 서비스
+#
+# [배포 전 반드시 수정]
+#   User, WorkingDirectory, EnvironmentFile, ExecStart 경로를
+#   실제 서버 계정명과 설치 경로에 맞게 변경
+#
+# [등록 및 시작]
+#   sudo cp smartsolution.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable smartsolution
+#   sudo systemctl start smartsolution
+# ──────────────────────────────────────────────────────────────
+
 [Unit]
 Description=Smart Solution Dashboard (Gunicorn)
-After=network.target
+After=network.target postgresql.service
 
 [Service]
-User=ubuntu
-WorkingDirectory=/home/ubuntu/smart_solution
-EnvironmentFile=/home/ubuntu/smart_solution/.env
+User=ubuntu                                          # ← 실제 계정명으로 변경
+WorkingDirectory=/home/ubuntu/smart_solution         # ← 실제 경로로 변경
+EnvironmentFile=/home/ubuntu/smart_solution/.env     # ← 실제 경로로 변경
 ExecStart=/home/ubuntu/smart_solution/venv/bin/gunicorn \
-    --workers 4 \
+    --workers 2 \
     --bind 127.0.0.1:5001 \
     --timeout 60 \
+    --access-logfile /var/log/smartsolution/access.log \
+    --error-logfile  /var/log/smartsolution/error.log \
     wsgi:app
-Restart=always
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+
+# 보안 샌드박스
+PrivateTmp=yes
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target
