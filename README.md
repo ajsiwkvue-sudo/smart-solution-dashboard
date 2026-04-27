@@ -100,7 +100,17 @@ python -c "import secrets; print(secrets.token_hex(32))"
 python app.py
 ```
 
-브라우저에서 http://127.0.0.1:5001 접속
+실행 시 콘솔에 두 개의 주소가 출력됩니다:
+
+```
+로컬:       http://127.0.0.1:5001
+같은 네트워크: http://192.168.x.x:5001   ← 같은 와이파이/망에서 접속 가능
+```
+
+같은 PC: `http://127.0.0.1:5001`
+다른 PC(같은 네트워크): 출력된 `http://192.168.x.x:5001` 주소로 접속
+
+> Windows 방화벽이 켜져 있으면 최초 실행 시 Python의 수신 연결 허용 창이 뜹니다 — "허용" 선택
 
 ---
 
@@ -162,10 +172,19 @@ python app.py
 
 프로덕션 (Gunicorn):
 ```bash
-gunicorn -w 2 -b 127.0.0.1:5001 wsgi:app
+gunicorn -w 2 -b 0.0.0.0:5001 wsgi:app
 ```
 
-서버 실행 후 http://127.0.0.1:5001 접속
+`python app.py` 실행 시 콘솔에 로컬/네트워크 주소가 출력됩니다:
+
+```
+로컬:       http://127.0.0.1:5001
+같은 네트워크: http://192.168.x.x:5001
+```
+
+- 같은 PC: `http://127.0.0.1:5001`
+- 같은 와이파이/망의 다른 기기: 출력된 `http://192.168.x.x:5001`
+- macOS는 최초 실행 시 방화벽이 수신 연결 허용을 묻습니다 → "허용"
 
 ---
 
@@ -174,7 +193,7 @@ gunicorn -w 2 -b 127.0.0.1:5001 wsgi:app
 | 항목 | 값 |
 |------|-----|
 | ID | `admin` |
-| PW | `.env`의 `ADMIN_PASSWORD` 값 (미설정 시 `admin1234`) |
+| PW | `.env`의 `ADMIN_PASSWORD` 값 (필수 — 미설정 시 서버 시작 실패) |
 
 > **최초 로그인 후 반드시 비밀번호 변경 권장**
 
@@ -227,7 +246,7 @@ smart-solution-dashboard/
 ├── app.py                   # Flask 애플리케이션 (라우트, DB, 인증)
 ├── wsgi.py                  # Gunicorn 진입점
 ├── requirements.txt
-├── .env                     # 환경변수 (git 제외)
+├── .env.example             # 환경변수 템플릿 (`.env`로 복사 후 값 입력)
 ├── templates/
 │   ├── login.html           # 로그인 페이지
 │   ├── admin.html           # 관리자 대시보드
@@ -275,4 +294,4 @@ sudo systemctl restart smartsolution
 
 ---
 
-*Last updated: 2026-04-21*
+*Last updated: 2026-04-27*

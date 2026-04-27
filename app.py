@@ -7,12 +7,13 @@ from functools import wraps
 import psycopg2
 import psycopg2.extras
 import os
+import socket
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ['SECRET_KEY']  # .env 필수 - fallback 없음
+app.secret_key = os.environ['SECRET_KEY']
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7일
 
@@ -160,7 +161,7 @@ def init_db():
                     INSERT INTO users (username, password_hash, role, created_at)
                     VALUES (%s, %s, 'admin', %s)
                 ''', ('admin',
-                       generate_password_hash(os.environ['ADMIN_PASSWORD'])  # .env 필수 - fallback 없음,
+                       generate_password_hash(os.environ['ADMIN_PASSWORD']),
                        datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         conn.commit()
     finally:
@@ -521,5 +522,24 @@ def reset_password():
         conn.close()
     return jsonify({'success': True})
 
+def _get_lan_ip():
+    """같은 네트워크에서 접속할 때 쓸 LAN IP 주소 반환. 실패 시 127.0.0.1."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))
+        return s.getsockname()[0]
+    except OSError:
+        return '127.0.0.1'
+    finally:
+        s.close()
+
 if __name__ == '__main__':
-    app.run(debug=False, port=5001)
+    port = 5001
+    lan_ip = _get_lan_ip()
+    print('\n' + '=' * 50)
+    print(' Smart Solution Dashboard 실행 중')
+    print('=' * 50)
+    print(f'  로컬:       http://127.0.0.1:{port}')
+    print(f'  같은 네트워크: http://{lan_ip}:{port}')
+    print('=' * 50 + '\n')
+    app.run(host='0.0.0.0', debug=False, port=port)

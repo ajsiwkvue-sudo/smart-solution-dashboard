@@ -30,15 +30,20 @@
 
 ## Tech Stack
 
-| Layer      | Technology                              |
-|------------|-----------------------------------------|
-| Backend    | Python 3.x + Flask                      |
-| Database   | SQLite3 (단일 파일 `db.sqlite3`)          |
-| Auth       | URL 기반 Access Key (`secrets.token_urlsafe`) |
-| Password   | `werkzeug.security` (PBKDF2 hashing)    |
-| Frontend   | Jinja2 템플릿 + Vanilla JS + Fetch API   |
-| Charts     | Chart.js (월별 bar chart)               |
-| Styling    | CSS Grid / Flexbox (외부 라이브러리 없음)  |
+| Layer      | Technology                                          |
+|------------|-----------------------------------------------------|
+| Backend    | Python 3.x + Flask                                  |
+| Database   | PostgreSQL (psycopg2-binary)                        |
+| Auth-Admin | Flask-Login (서버 세션 쿠키, 7일 유지)               |
+| Auth-Nurse | itsdangerous 서명 쿠키 `ward_session_{병동명}` (7일) |
+| Password   | `werkzeug.security` (PBKDF2 hashing)                |
+| Frontend   | Jinja2 + Vanilla JS + Fetch API                     |
+| Charts     | Chart.js (월별 bar chart)                           |
+| Styling    | CSS Grid / Flexbox (외부 라이브러리 없음)             |
+| WSGI       | Gunicorn                                            |
+| Proxy      | Nginx                                               |
+
+> 초기에는 SQLite + URL Access Key 방식이었으나 v1.1에서 PostgreSQL + Flask-Login으로 전환됨. 자세한 마이그레이션 내역은 [v1.1](#v11--postgresql-전환--flask-login-세션-인증-아키텍처-재설계) 참조.
 
 ---
 
@@ -597,4 +602,35 @@ return resp
 | `login.html` | 라벨 "아이디 (병동명)" — EMR 사번 로그인 반영 안됨 | "아이디 (사번 또는 병동명)"으로 변경 |
 | `CHANGELOG.md` | 제목 "Crate Dashboard" | "Smart Solution Dashboard"로 수정 |
 
-*Last updated: 2026-04-21*
+---
+
+### v1.5 — 환경변수 필수화 + LAN 접속 지원
+
+**보안 강화: 하드코딩 fallback 제거**
+
+- `app.secret_key`: `os.environ.get('SECRET_KEY', 'dev-secret-...')` → `os.environ['SECRET_KEY']` (필수)
+- `ADMIN_PASSWORD`: `os.environ.get('ADMIN_PASSWORD', 'admin1234')` → `os.environ['ADMIN_PASSWORD']` (필수)
+- `.env` 미설정 시 서버 시작 단계에서 즉시 실패 (KeyError)
+- 운영 환경에서 기본값으로 실수 배포되는 위험 차단
+
+**LAN 접속 지원**
+
+- `app.run(host='0.0.0.0', ...)`로 변경 — 같은 와이파이/망의 다른 기기에서 접속 가능
+- 서버 시작 시 콘솔에 로컬/네트워크 주소를 함께 출력 (UDP 소켓 트릭으로 LAN IP 자동 감지)
+
+```
+==================================================
+ Smart Solution Dashboard 실행 중
+==================================================
+  로컬:       http://127.0.0.1:5001
+  같은 네트워크: http://192.168.x.x:5001
+==================================================
+```
+
+**문서 정비**
+
+- `.env.example` 추가 (모노레포 기준 — `SECRET_KEY` / `DATABASE_URL` / `ADMIN_PASSWORD` 템플릿)
+- README.md / CHANGELOG.md Tech Stack 표를 PostgreSQL + Flask-Login 기준으로 갱신 (v0.1 시절 SQLite 표기 정리)
+- README.md 파일 구조 표기에서 `.env` → `.env.example`로 보정
+
+*Last updated: 2026-04-27*
