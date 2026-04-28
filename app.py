@@ -7,15 +7,22 @@ from functools import wraps
 import psycopg2
 import psycopg2.extras
 import os
+import secrets
 import socket
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# COOKIE_SECURE=true 인 경우에만 쿠키에 Secure 플래그 부여 (HTTPS 운영 시)
+COOKIE_SECURE = os.environ.get('COOKIE_SECURE', 'false').lower() == 'true'
+
 app = Flask(__name__)
 app.secret_key = os.environ['SECRET_KEY']
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7일
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = COOKIE_SECURE
 
 # ──────────────────────────────────────────────
 # Flask-Login 설정
@@ -40,20 +47,24 @@ def _cookie_name(ward_name):
     """병동별 고유 쿠키 이름 반환 — ward_session_병동명"""
     return f'ward_session_{ward_name}'
 
-def _set_ward_cookie(response, username, user_id, ward):
-    """ward 기준 쿠키 이름으로 서명 토큰 설정. 토큰에 사번(u)·id(i)·병동(w) 포함."""
-    token = _ward_serializer.dumps({'u': username, 'i': user_id, 'w': ward})
+def _set_ward_cookie(response, username, user_id, ward, csrf_token):
+    """ward 기준 쿠키 이름으로 서명 토큰 설정.
+    토큰에 사번(u)·id(i)·병동(w)·CSRF 토큰(c) 포함."""
+    token = _ward_serializer.dumps({
+        'u': username, 'i': user_id, 'w': ward, 'c': csrf_token
+    })
     response.set_cookie(
         _cookie_name(ward), token,
         max_age=86400 * 7,
         httponly=True,
-        samesite='Lax'
+        samesite='Lax',
+        secure=COOKIE_SECURE
     )
     return response
 
 def _get_ward_user(ward_name):
     """ward_session_<ward_name> 쿠키를 검증해 사용자 정보를 반환.
-    반환값: {'username': 사번, 'id': DB id, 'ward': 소속병동}"""
+    반환값: {'username': 사번, 'id': DB id, 'ward': 소속병동, 'csrf': CSRF 토큰}"""
     token = request.cookies.get(_cookie_name(ward_name))
     if not token:
         return None
@@ -62,7 +73,8 @@ def _get_ward_user(ward_name):
         return {
             'username': data['u'],
             'id':       data['i'],
-            'ward':     data.get('w', ward_name)  # 구버전 쿠키 호환
+            'ward':     data.get('w', ward_name),  # 구버전 쿠키 호환
+            'csrf':     data.get('c', '')          # 구버전 쿠키엔 없음
         }
     except (BadSignature, SignatureExpired):
         return None
@@ -170,6 +182,41 @@ def init_db():
 init_db()
 
 # ──────────────────────────────────────────────
+# CSRF 보호
+#   - admin: Flask 세션에 토큰 보관
+#   - ward : 서명된 ward 쿠키 페이로드에 토큰 포함
+#   - 검증: X-CSRF-Token 헤더 또는 _csrf 폼 필드
+# ──────────────────────────────────────────────
+
+def _ensure_admin_csrf():
+    """관리자 세션에 CSRF 토큰이 없으면 생성."""
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return session['csrf_token']
+
+def _request_csrf_token():
+    return request.headers.get('X-CSRF-Token', '') or request.form.get('_csrf', '')
+
+def csrf_protect(scope):
+    """scope: 'admin' 또는 'ward'."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            submitted = _request_csrf_token()
+            if scope == 'admin':
+                expected = session.get('csrf_token', '')
+            else:  # ward
+                ward_name = kwargs.get('ward_name') or request.form.get('ward', '')
+                ward_user = _get_ward_user(ward_name) if ward_name else None
+                expected = (ward_user or {}).get('csrf', '')
+            if not expected or not submitted or not secrets.compare_digest(submitted, expected):
+                return jsonify({'success': False,
+                                'error': '세션이 만료되었습니다. 페이지를 새로고침해주세요.'}), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+# ──────────────────────────────────────────────
 # Role 체크 데코레이터
 # ──────────────────────────────────────────────
 
@@ -223,13 +270,15 @@ def login():
                 user_obj = User(user['id'], user['username'], user['role'])
                 login_user(user_obj, remember=True)
                 session.permanent = True
+                session['csrf_token'] = secrets.token_hex(32)
                 return redirect(url_for('admin'))
             else:
                 # 간호사: 병동별 쿠키 사용 (Flask-Login 세션에 영향 없음)
                 # ward 컬럼 = 소속 병동 (EMR 연동 시 EMR에서 받아온 값으로 대체)
                 ward = user['ward'] or user['username']  # 마이그레이션 전 계정 fallback
+                csrf_token = secrets.token_hex(32)
                 resp = make_response(redirect(url_for('ward_view', ward_name=ward)))
-                _set_ward_cookie(resp, user['username'], user['id'], ward)
+                _set_ward_cookie(resp, user['username'], user['id'], ward, csrf_token)
                 return resp
         else:
             error = '아이디 또는 비밀번호가 올바르지 않습니다'
@@ -257,7 +306,15 @@ def ward_logout(ward_name):
 @app.route('/ward/<ward_name>')
 @require_ward
 def ward_view(ward_name):
-    ward = _get_ward_user(ward_name)['ward']   # ← ['ward'] 사용 (사번 ≠ 병동명)
+    ward_user = _get_ward_user(ward_name)
+    ward = ward_user['ward']                   # ← ['ward'] 사용 (사번 ≠ 병동명)
+
+    # 구버전 쿠키(CSRF 토큰 없음) 자동 업그레이드
+    csrf_token = ward_user['csrf']
+    needs_refresh = not csrf_token
+    if needs_refresh:
+        csrf_token = secrets.token_hex(32)
+
     conn = get_db()
     try:
         with conn.cursor() as c:
@@ -283,12 +340,16 @@ def ward_view(ward_name):
             status_count[st] += 1
     solution_count = dict(sorted(solution_count.items(), key=lambda x: x[1], reverse=True))
 
-    return render_template('ward.html',
+    resp = make_response(render_template('ward.html',
                            ward=ward,
                            complaints=complaints,
                            solution_count=solution_count,
                            monthly_count=monthly_count,
-                           status_count=status_count)
+                           status_count=status_count,
+                           csrf_token=csrf_token))
+    if needs_refresh:
+        _set_ward_cookie(resp, ward_user['username'], ward_user['id'], ward, csrf_token)
+    return resp
 
 @app.route('/api/ward_poll/<ward_name>')
 @require_ward
@@ -312,6 +373,7 @@ def ward_poll(ward_name):
 
 @app.route('/api/submit', methods=['POST'])
 @require_ward
+@csrf_protect('ward')
 def api_submit():
     ward_name    = request.form.get('ward', '')
     ward_user    = _get_ward_user(ward_name)
@@ -348,6 +410,7 @@ def api_submit():
 @app.route('/admin')
 @require_role('admin')
 def admin():
+    _ensure_admin_csrf()  # 구세션 호환: 토큰 없으면 발급
     conn = get_db()
     try:
         with conn.cursor() as c:
@@ -392,10 +455,12 @@ def admin():
                            top_solution=top_solution,
                            latest_month_count=latest_month_count,
                            status_count=status_count,
-                           accounts=accounts)
+                           accounts=accounts,
+                           csrf_token=session['csrf_token'])
 
 @app.route('/action', methods=['POST'])
 @require_role('admin')
+@csrf_protect('admin')
 def action():
     complaint_id = request.form.get('id')
     act          = request.form.get('action')
@@ -463,6 +528,7 @@ def poll():
 
 @app.route('/admin/accounts/add', methods=['POST'])
 @require_role('admin')
+@csrf_protect('admin')
 def add_account():
     username = request.form.get('username', '').strip()  # 사번 또는 병동명
     ward     = request.form.get('ward', '').strip()      # 소속 병동 (비어있으면 username과 동일)
@@ -493,6 +559,7 @@ def add_account():
 
 @app.route('/admin/accounts/delete', methods=['POST'])
 @require_role('admin')
+@csrf_protect('admin')
 def delete_account():
     user_id = request.form.get('id')
     conn = get_db()
@@ -506,6 +573,7 @@ def delete_account():
 
 @app.route('/admin/accounts/reset', methods=['POST'])
 @require_role('admin')
+@csrf_protect('admin')
 def reset_password():
     user_id      = request.form.get('id')
     new_password = request.form.get('password', '').strip()

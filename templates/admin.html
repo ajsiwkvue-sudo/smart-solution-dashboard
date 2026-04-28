@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>관리자 대시보드</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -943,6 +944,17 @@
 <div id="toast"></div>
 
 <script>
+  /* ── 보안 헬퍼 ── */
+  const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+  function csrfHeaders(extra) {
+    return Object.assign({ 'X-CSRF-Token': CSRF_TOKEN }, extra || {});
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
   /* ── 월별 막대 차트 ── */
   const monthLabels = {{ monthly_count.keys() | list | tojson }};
   const monthData   = {{ monthly_count.values() | list | tojson }};
@@ -1007,7 +1019,7 @@
 
     fetch('/action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: csrfHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' }),
       body: new URLSearchParams({ id, action: act, message: msg })
     })
     .then(r => r.json())
@@ -1134,8 +1146,8 @@
       <div class="bell-item">
         <div class="bell-dot"></div>
         <div class="bell-item-body">
-          <div class="bell-item-title">#${c.id} ${c.ward} — ${c.solution}</div>
-          <div class="bell-item-sub">${c.issue || ''} · ${(c.created_at||'').slice(0,16)}</div>
+          <div class="bell-item-title">#${escapeHtml(c.id)} ${escapeHtml(c.ward)} — ${escapeHtml(c.solution)}</div>
+          <div class="bell-item-sub">${escapeHtml(c.issue || '')} · ${escapeHtml((c.created_at||'').slice(0,16))}</div>
         </div>
       </div>`).join('');
   }
@@ -1282,10 +1294,10 @@
         ?'<div style="text-align:center;color:#ccc;padding:20px;font-size:13px">이 날 접수된 민원이 없습니다</div>'
         :items.map(c=>`
           <div class="cal-det-item">
-            <span class="cal-det-id">#${c.id}</span>
-            <span class="cal-det-ward">${c.ward}</span>
-            <span class="cal-det-sol">${c.solution}</span>
-            <span class="cal-stat-chip csc-${c.status}">${c.status}</span>
+            <span class="cal-det-id">#${escapeHtml(c.id)}</span>
+            <span class="cal-det-ward">${escapeHtml(c.ward)}</span>
+            <span class="cal-det-sol">${escapeHtml(c.solution)}</span>
+            <span class="cal-stat-chip csc-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span>
           </div>`).join('');
     }
 
@@ -1321,7 +1333,7 @@
 
     fetch('/admin/accounts/add', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: csrfHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' }),
       body: new URLSearchParams({ username, ward, password })
     })
     .then(r => r.json())
@@ -1338,16 +1350,15 @@
         const emptyRow = tbody.querySelector('.empty-acc');
         if (emptyRow) emptyRow.closest('tr').remove();
         const now = new Date().toISOString().slice(0,19).replace('T',' ');
-        // HTML injection 방지: textContent로 삽입
-        const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        const safeName = escapeHtml(data.username).replace(/'/g, "\\'");
         tbody.insertAdjacentHTML('afterbegin', `
           <tr id="acc-row-${data.id}">
-            <td class="ward-name">${esc(data.username)}</td>
-            <td><span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">${esc(displayWard)}</span></td>
-            <td class="created-at">${esc(now)}</td>
+            <td class="ward-name">${escapeHtml(data.username)}</td>
+            <td><span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">${escapeHtml(displayWard)}</span></td>
+            <td class="created-at">${escapeHtml(now)}</td>
             <td>
               <button class="btn-reset" onclick="toggleReset(${data.id})">🔑 비번 변경</button>
-              <button class="btn-del"   onclick="deleteAccount(${data.id},'${esc(data.username)}')">삭제</button>
+              <button class="btn-del"   onclick="deleteAccount(${data.id},'${safeName}')">삭제</button>
               <div class="reset-row" id="reset-${data.id}">
                 <input type="password" id="rpw-${data.id}" placeholder="새 비밀번호">
                 <button class="btn-confirm-reset" onclick="confirmReset(${data.id})">변경</button>
@@ -1370,7 +1381,7 @@
     if (!confirm(`"${name}" 계정을 삭제할까요?\n해당 병동의 민원 데이터는 유지됩니다.`)) return;
     fetch('/admin/accounts/delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: csrfHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' }),
       body: new URLSearchParams({ id })
     })
     .then(r => r.json())
@@ -1393,7 +1404,7 @@
     if (!pw) { alert('새 비밀번호를 입력해주세요'); return; }
     fetch('/admin/accounts/reset', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: csrfHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' }),
       body: new URLSearchParams({ id, password: pw })
     })
     .then(r => r.json())
